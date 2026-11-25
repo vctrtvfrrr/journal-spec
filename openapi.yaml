@@ -1,9 +1,11 @@
 openapi: 3.1.0
 info:
   title: Journal API
-  version: 0.1.0
+  version: 0.2.0
   description: |-
     API for the Tasks, Notebooks, and Notes of a single owner.
+
+    Every request must send `Contract-Version` with the version of this contract that the Client was built with, and every response carries the version the API implements. The API checks this header before anything else, including authentication, unknown paths (404), unsupported methods (405) and the request content type (415): a missing or malformed value, or a version below the minimum, returns 400 with a `ContractVersionProblem` that names the minimum version. From 1.0.0 on, the minimum is the first version of the current major (`X.0.0`); while the contract is at 0.x, any valid version is accepted. Clients must ignore response fields they do not know, because new versions add fields.
 
     Every endpoint except login (`POST /devices`) requires `Authorization: Bearer <token>`. Logging in with the master password returns a token for one Device. Tokens do not expire; a token stops working only when its Device is revoked with `DELETE /devices/{id}`. A missing, unknown or revoked token returns 401 with a `WWW-Authenticate` header, also on unknown paths.
 
@@ -26,6 +28,8 @@ tags:
     description: Devices logged in with the master password. Each login creates a Device with its own token.
 paths:
   /tasks:
+    parameters:
+      - $ref: "#/components/parameters/ContractVersion"
     get:
       tags: [Tasks]
       operationId: listTasks
@@ -33,6 +37,9 @@ paths:
       description: Returns all Tasks that are not deleted, ordered by `priority` ascending, then `created_at` descending, then `id` ascending. There are no filters and no pagination.
       responses:
         "200":
+          headers:
+            Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
           description: List of Tasks, empty when there are none.
           content:
             application/json:
@@ -40,6 +47,8 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Task"
+        "400":
+          $ref: "#/components/responses/ContractVersionUnsupported"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "500":
@@ -63,6 +72,8 @@ paths:
         "201":
           description: Task created.
           headers:
+            Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
             Location:
               $ref: "#/components/headers/Location"
           content:
@@ -79,6 +90,7 @@ paths:
           $ref: "#/components/responses/InternalServerError"
   /tasks/{id}:
     parameters:
+      - $ref: "#/components/parameters/ContractVersion"
       - $ref: "#/components/parameters/TaskId"
     get:
       tags: [Tasks]
@@ -86,6 +98,9 @@ paths:
       summary: Get a Task
       responses:
         "200":
+          headers:
+            Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
           description: The Task.
           content:
             application/json:
@@ -118,6 +133,9 @@ paths:
               status: doing
       responses:
         "200":
+          headers:
+            Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
           description: Existing Task replaced.
           content:
             application/json:
@@ -126,6 +144,8 @@ paths:
         "201":
           description: Task created with the given ID.
           headers:
+            Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
             Location:
               $ref: "#/components/headers/Location"
           content:
@@ -135,6 +155,9 @@ paths:
         "400":
           $ref: "#/components/responses/BadRequest"
         "409":
+          headers:
+            Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
           description: The ID belongs to a deleted Task. Deleted Tasks are not restored.
           content:
             application/problem+json:
@@ -169,6 +192,9 @@ paths:
               status: done
       responses:
         "200":
+          headers:
+            Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
           description: The Task after the change.
           content:
             application/json:
@@ -191,6 +217,9 @@ paths:
       description: Soft delete. The Task then returns 404 on every endpoint and disappears from the list. There is no restore.
       responses:
         "204":
+          headers:
+            Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
           description: Task deleted.
         "400":
           $ref: "#/components/responses/InvalidTaskId"
@@ -201,6 +230,8 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
   /notebooks:
+    parameters:
+      - $ref: "#/components/parameters/ContractVersion"
     get:
       tags: [Notebooks]
       operationId: listNotebooks
@@ -208,6 +239,9 @@ paths:
       description: Returns all Notebooks that are not archived, in creation order (`created_at` ascending, then `id` ascending). There are no filters and no pagination.
       responses:
         "200":
+          headers:
+            Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
           description: List of Notebooks, empty when there are none.
           content:
             application/json:
@@ -215,6 +249,8 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Notebook"
+        "400":
+          $ref: "#/components/responses/ContractVersionUnsupported"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "500":
@@ -236,6 +272,8 @@ paths:
         "201":
           description: Notebook created.
           headers:
+            Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
             Location:
               $ref: "#/components/headers/Location"
           content:
@@ -254,6 +292,7 @@ paths:
           $ref: "#/components/responses/InternalServerError"
   /notebooks/{id}:
     parameters:
+      - $ref: "#/components/parameters/ContractVersion"
       - $ref: "#/components/parameters/NotebookId"
     get:
       tags: [Notebooks]
@@ -261,6 +300,9 @@ paths:
       summary: Get a Notebook
       responses:
         "200":
+          headers:
+            Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
           description: The Notebook.
           content:
             application/json:
@@ -289,6 +331,9 @@ paths:
               name: College
       responses:
         "200":
+          headers:
+            Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
           description: Existing Notebook renamed.
           content:
             application/json:
@@ -297,6 +342,8 @@ paths:
         "201":
           description: Notebook created with the given ID.
           headers:
+            Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
             Location:
               $ref: "#/components/headers/Location"
           content:
@@ -306,6 +353,9 @@ paths:
         "400":
           $ref: "#/components/responses/BadRequest"
         "409":
+          headers:
+            Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
           description: The ID belongs to an archived Notebook, or another active Notebook already has the name.
           content:
             application/problem+json:
@@ -347,6 +397,9 @@ paths:
               name: Studies
       responses:
         "200":
+          headers:
+            Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
           description: The Notebook after the change.
           content:
             application/json:
@@ -374,6 +427,9 @@ paths:
         The Notebook's Notes do not change: they stay reachable through `/notes/{id}`, but `GET /notes?notebook=` with this Notebook returns 404.
       responses:
         "204":
+          headers:
+            Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
           description: Notebook archived.
         "400":
           $ref: "#/components/responses/InvalidNotebookId"
@@ -384,6 +440,8 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
   /notes:
+    parameters:
+      - $ref: "#/components/parameters/ContractVersion"
     get:
       tags: [Notes]
       operationId: listNotes
@@ -413,6 +471,8 @@ paths:
         "200":
           description: One page of Notes, empty when there are none.
           headers:
+            Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
             Link:
               description: Next page, only when it exists.
               schema:
@@ -452,6 +512,8 @@ paths:
         "201":
           description: Note created.
           headers:
+            Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
             Location:
               $ref: "#/components/headers/Location"
           content:
@@ -468,6 +530,7 @@ paths:
           $ref: "#/components/responses/InternalServerError"
   /notes/{id}:
     parameters:
+      - $ref: "#/components/parameters/ContractVersion"
       - $ref: "#/components/parameters/NoteId"
     get:
       tags: [Notes]
@@ -475,6 +538,9 @@ paths:
       summary: Get a Note
       responses:
         "200":
+          headers:
+            Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
           description: The Note.
           content:
             application/json:
@@ -505,6 +571,9 @@ paths:
               date: "2024-03"
       responses:
         "200":
+          headers:
+            Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
           description: Existing Note replaced.
           content:
             application/json:
@@ -513,6 +582,8 @@ paths:
         "201":
           description: Note created with the given ID.
           headers:
+            Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
             Location:
               $ref: "#/components/headers/Location"
           content:
@@ -522,6 +593,9 @@ paths:
         "400":
           $ref: "#/components/responses/BadRequest"
         "409":
+          headers:
+            Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
           description: The ID belongs to a deleted Note. Deleted Notes are not restored.
           content:
             application/problem+json:
@@ -556,6 +630,9 @@ paths:
               notebook_id: 0190f3a1-0000-7000-8000-00000000d1a0
       responses:
         "200":
+          headers:
+            Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
           description: The Note after the change.
           content:
             application/json:
@@ -578,6 +655,9 @@ paths:
       description: Soft delete. The Note then returns 404 on every endpoint and disappears from the Timeline. There is no restore.
       responses:
         "204":
+          headers:
+            Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
           description: Note deleted.
         "400":
           $ref: "#/components/responses/InvalidNoteId"
@@ -588,6 +668,8 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
   /devices:
+    parameters:
+      - $ref: "#/components/parameters/ContractVersion"
     post:
       tags: [Devices]
       operationId: login
@@ -610,6 +692,8 @@ paths:
         "201":
           description: Device logged in.
           headers:
+            Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
             Location:
               $ref: "#/components/headers/Location"
           content:
@@ -633,6 +717,9 @@ paths:
       description: Returns all Devices with access, in login order. The calling Device has `current` set to true. Tokens never appear.
       responses:
         "200":
+          headers:
+            Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
           description: List of Devices.
           content:
             application/json:
@@ -640,12 +727,15 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/ListedDevice"
+        "400":
+          $ref: "#/components/responses/ContractVersionUnsupported"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "500":
           $ref: "#/components/responses/InternalServerError"
   /devices/{id}:
     parameters:
+      - $ref: "#/components/parameters/ContractVersion"
       - $ref: "#/components/parameters/DeviceId"
     delete:
       tags: [Devices]
@@ -654,6 +744,9 @@ paths:
       description: Deletes the Device, and its token stops working at once. With the calling Device's own ID, it works as a logout.
       responses:
         "204":
+          headers:
+            Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
           description: Device revoked.
         "400":
           $ref: "#/components/responses/InvalidDeviceId"
@@ -706,13 +799,29 @@ components:
         type: string
         format: uuid
       example: 0190f3a2-7c1e-7b3d-9a4f-2c8e5d6b1a90
+    ContractVersion:
+      name: Contract-Version
+      in: header
+      required: true
+      description: Version of this contract that the Client was built with. The API rejects a missing or malformed value, or a version below the minimum it supports, with a `ContractVersionProblem`.
+      schema:
+        $ref: "#/components/schemas/ContractVersion"
   headers:
+    ContractVersion:
+      description: Version of this contract that the API implements.
+      schema:
+        $ref: "#/components/schemas/ContractVersion"
     Location:
       description: Path of the created resource.
       schema:
         type: string
       example: /tasks/0190f3a2-7c1e-7b3d-9a4f-2c8e5d6b1a90
   schemas:
+    ContractVersion:
+      type: string
+      description: A version of this contract (`info.version`), in Semantic Versioning `MAJOR.MINOR.PATCH`.
+      pattern: ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$
+      example: 0.2.0
     TaskStatus:
       type: string
       enum: [todo, doing, done]
@@ -1000,6 +1109,24 @@ components:
               type: array
               items:
                 $ref: "#/components/schemas/FieldError"
+    ContractVersionProblem:
+      type: object
+      description: Problem details (RFC 9457) for a request whose `Contract-Version` header is missing, malformed, or below the minimum version the API supports.
+      required: [type, title, status, detail, minimum_version]
+      properties:
+        type:
+          type: string
+          const: tag:journal,2026:contract-version-unsupported
+        title:
+          type: string
+          description: Standard reason phrase of the HTTP status.
+        status:
+          type: integer
+          const: 400
+        detail:
+          type: string
+        minimum_version:
+          $ref: "#/components/schemas/ContractVersion"
     FieldError:
       type: object
       required: [pointer, detail]
@@ -1011,15 +1138,34 @@ components:
         detail:
           type: string
   responses:
-    BadRequest:
-      description: |-
-        Invalid request. For invalid, unknown or read-only fields, `errors` lists each field. For malformed JSON or an ID that is not a UUID, the response has no `errors`.
+    ContractVersionUnsupported:
+      headers:
+        Contract-Version:
+          $ref: "#/components/headers/ContractVersion"
+      description: The `Contract-Version` header is missing, malformed, or below the minimum version the API supports.
       content:
         application/problem+json:
           schema:
-            oneOf:
+            $ref: "#/components/schemas/ContractVersionProblem"
+          example:
+            type: tag:journal,2026:contract-version-unsupported
+            title: Bad Request
+            status: 400
+            detail: The Contract-Version header must be a version such as 1.2.3.
+            minimum_version: 0.0.0
+    BadRequest:
+      headers:
+        Contract-Version:
+          $ref: "#/components/headers/ContractVersion"
+      description: |-
+        Invalid request. For invalid, unknown or read-only fields, `errors` lists each field. For malformed JSON or an ID that is not a UUID, the response has no `errors`. A rejected `Contract-Version` header returns a `ContractVersionProblem`.
+      content:
+        application/problem+json:
+          schema:
+            anyOf:
               - $ref: "#/components/schemas/ValidationProblem"
               - $ref: "#/components/schemas/Problem"
+              - $ref: "#/components/schemas/ContractVersionProblem"
           examples:
             invalidFields:
               summary: Invalid fields
@@ -1041,17 +1187,25 @@ components:
                 status: 400
                 detail: The request body must be valid JSON.
     InvalidTaskId:
-      description: The path ID is not a UUID.
+      headers:
+        Contract-Version:
+          $ref: "#/components/headers/ContractVersion"
+      description: The path ID is not a UUID, or the `Contract-Version` header is rejected.
       content:
         application/problem+json:
           schema:
-            $ref: "#/components/schemas/Problem"
+            anyOf:
+              - $ref: "#/components/schemas/Problem"
+              - $ref: "#/components/schemas/ContractVersionProblem"
           example:
             type: about:blank
             title: Bad Request
             status: 400
             detail: Task ID must be a UUID.
     NotFound:
+      headers:
+        Contract-Version:
+          $ref: "#/components/headers/ContractVersion"
       description: The Task does not exist or was deleted.
       content:
         application/problem+json:
@@ -1063,17 +1217,25 @@ components:
             status: 404
             detail: Task 0190f3a2-7c1e-7b3d-9a4f-2c8e5d6b1a90 does not exist.
     InvalidNoteId:
-      description: The path ID is not a UUID.
+      headers:
+        Contract-Version:
+          $ref: "#/components/headers/ContractVersion"
+      description: The path ID is not a UUID, or the `Contract-Version` header is rejected.
       content:
         application/problem+json:
           schema:
-            $ref: "#/components/schemas/Problem"
+            anyOf:
+              - $ref: "#/components/schemas/Problem"
+              - $ref: "#/components/schemas/ContractVersionProblem"
           example:
             type: about:blank
             title: Bad Request
             status: 400
             detail: Note ID must be a UUID.
     NoteNotFound:
+      headers:
+        Contract-Version:
+          $ref: "#/components/headers/ContractVersion"
       description: The Note does not exist or was deleted.
       content:
         application/problem+json:
@@ -1085,11 +1247,16 @@ components:
             status: 404
             detail: Note 0190f3a2-7c1e-7b3d-9a4f-2c8e5d6b1a90 does not exist.
     InvalidTimelineQuery:
-      description: The `notebook` parameter is missing or is not a UUID, or the cursor was not generated by the API or was changed.
+      headers:
+        Contract-Version:
+          $ref: "#/components/headers/ContractVersion"
+      description: The `notebook` parameter is missing or is not a UUID, or the cursor was not generated by the API or was changed, or the `Contract-Version` header is rejected.
       content:
         application/problem+json:
           schema:
-            $ref: "#/components/schemas/Problem"
+            anyOf:
+              - $ref: "#/components/schemas/Problem"
+              - $ref: "#/components/schemas/ContractVersionProblem"
           examples:
             missingNotebook:
               summary: Missing or invalid Notebook
@@ -1106,17 +1273,25 @@ components:
                 status: 400
                 detail: The cursor is invalid.
     InvalidNotebookId:
-      description: The path ID is not a UUID.
+      headers:
+        Contract-Version:
+          $ref: "#/components/headers/ContractVersion"
+      description: The path ID is not a UUID, or the `Contract-Version` header is rejected.
       content:
         application/problem+json:
           schema:
-            $ref: "#/components/schemas/Problem"
+            anyOf:
+              - $ref: "#/components/schemas/Problem"
+              - $ref: "#/components/schemas/ContractVersionProblem"
           example:
             type: about:blank
             title: Bad Request
             status: 400
             detail: Notebook ID must be a UUID.
     NotebookNotFound:
+      headers:
+        Contract-Version:
+          $ref: "#/components/headers/ContractVersion"
       description: The Notebook does not exist or was archived.
       content:
         application/problem+json:
@@ -1128,6 +1303,9 @@ components:
             status: 404
             detail: Notebook 0190f3a1-0000-7000-8000-00000000d1a0 does not exist.
     NotebookNameTaken:
+      headers:
+        Contract-Version:
+          $ref: "#/components/headers/ContractVersion"
       description: Another Notebook that is not archived already has this name, ignoring case.
       content:
         application/problem+json:
@@ -1139,6 +1317,9 @@ components:
             status: 409
             detail: A notebook named Plants already exists.
     UnsupportedMediaType:
+      headers:
+        Contract-Version:
+          $ref: "#/components/headers/ContractVersion"
       description: "The body does not use `Content-Type: application/json`."
       content:
         application/problem+json:
@@ -1152,6 +1333,8 @@ components:
     Unauthorized:
       description: The Bearer token is missing, unknown or revoked. The `WWW-Authenticate` header includes `error="invalid_token"` when a token was sent.
       headers:
+        Contract-Version:
+          $ref: "#/components/headers/ContractVersion"
         WWW-Authenticate:
           schema:
             type: string
@@ -1166,6 +1349,9 @@ components:
             status: 401
             detail: The token is invalid or was revoked.
     WrongPassword:
+      headers:
+        Contract-Version:
+          $ref: "#/components/headers/ContractVersion"
       description: The master password is wrong. It counts as a failure for the login attempt limit.
       content:
         application/problem+json:
@@ -1179,6 +1365,8 @@ components:
     TooManyLogins:
       description: The client IP sent a wrong password 5 times in the last 15 minutes.
       headers:
+        Contract-Version:
+          $ref: "#/components/headers/ContractVersion"
         Retry-After:
           description: Seconds until the next attempt is accepted.
           schema:
@@ -1193,17 +1381,25 @@ components:
             status: 429
             detail: Too many failed logins. Try again later.
     InvalidDeviceId:
-      description: The path ID is not a UUID.
+      headers:
+        Contract-Version:
+          $ref: "#/components/headers/ContractVersion"
+      description: The path ID is not a UUID, or the `Contract-Version` header is rejected.
       content:
         application/problem+json:
           schema:
-            $ref: "#/components/schemas/Problem"
+            anyOf:
+              - $ref: "#/components/schemas/Problem"
+              - $ref: "#/components/schemas/ContractVersionProblem"
           example:
             type: about:blank
             title: Bad Request
             status: 400
             detail: Device ID must be a UUID.
     DeviceNotFound:
+      headers:
+        Contract-Version:
+          $ref: "#/components/headers/ContractVersion"
       description: The Device does not exist or was already revoked.
       content:
         application/problem+json:
@@ -1215,6 +1411,9 @@ components:
             status: 404
             detail: Device 0190f3a3-1111-7000-8000-0000000de71c does not exist.
     InternalServerError:
+      headers:
+        Contract-Version:
+          $ref: "#/components/headers/ContractVersion"
       description: Unexpected error. The response does not expose internal details.
       content:
         application/problem+json:
