@@ -1,0 +1,44 @@
+name: Contract
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  check-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      code: read
+      releases: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version: 1.4.5
+
+      - run: bun install --frozen-lockfile
+
+      - name: Check and decide release
+        id: release
+        run: bun run check
+        env:
+          RELEASE_NOTES: ${{ runner.temp }}/release-notes.md
+
+      - name: Create tag and release
+        if: steps.release.outputs.release == 'true'
+        env:
+          GITEA_API_URL: ${{ gitea.api_url }}
+          GITEA_REPOSITORY: ${{ gitea.repository }}
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          VERSION: ${{ steps.release.outputs.version }}
+          NOTES: ${{ runner.temp }}/release-notes.md
+        run: |
+          jq -n --arg tag "v$VERSION" --arg sha "$GITHUB_SHA" --rawfile body "$NOTES" \
+            '{tag_name: $tag, target_commitish: $sha, name: $tag, body: $body}' |
+            curl -fsS -X POST "$GITEA_API_URL/repos/$GITEA_REPOSITORY/releases" \
+              -H "Authorization: token $GITEA_TOKEN" \
+              -H "Content-Type: application/json" \
+              --data @-

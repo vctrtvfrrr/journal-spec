@@ -1,0 +1,17 @@
+{
+  "name": "journal-spec",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "bun --bun redocly lint openapi.yaml",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "install:oasdiff": "./scripts/install-oasdiff.sh",
+    "check": "bun run lint && bun run typecheck && bun test && bun run install:oasdiff && bun scripts/release.ts"
+  },
+  "devDependencies": {
+    "@redocly/cli": "2.76.0",
+    "@types/bun": "1.4.4",
+    "typescript": "7.0.2"
+  }
+}

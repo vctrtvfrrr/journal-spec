@@ -1,0 +1,61 @@
+plugins:
+  - ./redocly/guidelines.ts
+
+extends:
+  - recommended-strict
+
+rules:
+  # A private, single-owner project: no license and only a local server.
+  info-license: off
+  no-server-example.com: off
+
+  rule/g01-problem-details:
+    subject:
+      type: MediaTypesMap
+    where:
+      - subject:
+          type: Response
+          matchParentKeys: /^[45]\d\d$/
+        assertions:
+          defined: true
+    assertions:
+      enum: [application/problem+json]
+    message: "G-01: error responses use application/problem+json."
+
+  journal/g01-problem-schema: error
+  journal/g02-unauthorized: error
+
+  rule/g03-internal-server-error:
+    subject:
+      type: Responses
+    assertions:
+      required: ["500"]
+    message: "G-03: every operation declares a 500 response."
+  journal/g04-closed-request-body: error
+  journal/g05-unsupported-media-type: error
+  journal/g06-invalid-and-unknown-id: error
+  journal/g07-contract-version-header: error
+  journal/g08-contract-version-parameter: error
+  journal/g08-contract-version-problem: error
+
+  rule/g09-operation-id-casing:
+    subject:
+      type: Operation
+      property: operationId
+    assertions:
+      casing: camelCase
+    message: "G-09: operationId is camelCase."
+
+  rule/g09-schema-name-casing:
+    subject:
+      type: NamedSchemas
+    assertions:
+      casing: PascalCase
+    message: "G-09: schema names are PascalCase."
+
+  rule/g09-property-casing:
+    subject:
+      type: SchemaProperties
+    assertions:
+      casing: snake_case
+    message: "G-09: property names are snake_case."
