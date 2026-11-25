@@ -71,7 +71,7 @@ switch (decision.action) {
     await writeNotes(async () =>
       hasChanges
         ? $`${OASDIFF} changelog ${base} ${CONTRACT} --format markdown`.text()
-        : "Only descriptions and examples changed.",
+        : "oasdiff detected no API changes. See the commit history for what changed.",
     );
     console.log(`Release v${candidate} (${bumpKind(latestVersion, candidate)} from ${tag}).`);
 }
