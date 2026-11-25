@@ -1,0 +1,1227 @@
+openapi: 3.1.0
+info:
+  title: Journal API
+  version: 0.1.0
+  description: |-
+    API for the Tasks, Notebooks, and Notes of a single owner.
+
+    Every endpoint except login (`POST /devices`) requires `Authorization: Bearer <token>`. Logging in with the master password returns a token for one Device. Tokens do not expire; a token stops working only when its Device is revoked with `DELETE /devices/{id}`. A missing, unknown or revoked token returns 401 with a `WWW-Authenticate` header, also on unknown paths.
+
+    Request bodies must use `Content-Type: application/json`. In any writable field, `null` is the same as omitting the field. Unknown or read-only fields (`id`, `created_at`, `updated_at`, `deleted_at`) are rejected with 400, even when their value is `null`.
+
+    Errors use RFC 9457 problem details (`application/problem+json`). An unknown path returns 404. An unsupported method on a known path returns 405 with an `Allow` header.
+servers:
+  - url: http://localhost:3000
+    description: Local development
+security:
+  - bearerAuth: []
+tags:
+  - name: Tasks
+    description: Tasks with a title, description, status, and priority.
+  - name: Notebooks
+    description: Notebooks that group Notes, such as Diary or Plants.
+  - name: Notes
+    description: Markdown Notes, each with a Partial Date, on the Timeline of their Notebook.
+  - name: Devices
+    description: Devices logged in with the master password. Each login creates a Device with its own token.
+paths:
+  /tasks:
+    get:
+      tags: [Tasks]
+      operationId: listTasks
+      summary: List Tasks
+      description: Returns all Tasks that are not deleted, ordered by `priority` ascending, then `created_at` descending, then `id` ascending. There are no filters and no pagination.
+      responses:
+        "200":
+          description: List of Tasks, empty when there are none.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Task"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    post:
+      tags: [Tasks]
+      operationId: createTask
+      summary: Create a Task
+      description: Creates a Task with a server-generated ID (UUIDv7). Omitted fields get their default values.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskInput"
+            example:
+              title: Buy milk
+              description: 2 liters
+              priority: 1
+      responses:
+        "201":
+          description: Task created.
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+  /tasks/{id}:
+    parameters:
+      - $ref: "#/components/parameters/TaskId"
+    get:
+      tags: [Tasks]
+      operationId: getTask
+      summary: Get a Task
+      responses:
+        "200":
+          description: The Task.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+        "400":
+          $ref: "#/components/responses/InvalidTaskId"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    put:
+      tags: [Tasks]
+      operationId: putTask
+      summary: Create or replace a Task
+      description: |-
+        Upsert with a client-chosen ID.
+
+        If the ID does not exist, creates the Task (201). If it exists, replaces the whole Task (200): omitted or `null` fields return to their defaults, and `created_at` is kept. If the ID belongs to a deleted Task, returns 409.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskInput"
+            example:
+              title: Water the plants
+              status: doing
+      responses:
+        "200":
+          description: Existing Task replaced.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+        "201":
+          description: Task created with the given ID.
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          description: The ID belongs to a deleted Task. Deleted Tasks are not restored.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+              example:
+                type: about:blank
+                title: Conflict
+                status: 409
+                detail: Task 0190f3a2-7c1e-7b3d-9a4f-2c8e5d6b1a90 was deleted.
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    patch:
+      tags: [Tasks]
+      operationId: updateTask
+      summary: Update part of a Task
+      description: |-
+        Changes only the fields in the body. `null` fields are ignored, and `description: ""` clears the description.
+
+        Any field present updates `updated_at`, even if the value does not change. A body with no fields (`{}` or only `null`) returns the Task unchanged.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskChanges"
+            example:
+              status: done
+      responses:
+        "200":
+          description: The Task after the change.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    delete:
+      tags: [Tasks]
+      operationId: deleteTask
+      summary: Delete a Task
+      description: Soft delete. The Task then returns 404 on every endpoint and disappears from the list. There is no restore.
+      responses:
+        "204":
+          description: Task deleted.
+        "400":
+          $ref: "#/components/responses/InvalidTaskId"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+  /notebooks:
+    get:
+      tags: [Notebooks]
+      operationId: listNotebooks
+      summary: List Notebooks
+      description: Returns all Notebooks that are not archived, in creation order (`created_at` ascending, then `id` ascending). There are no filters and no pagination.
+      responses:
+        "200":
+          description: List of Notebooks, empty when there are none.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Notebook"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    post:
+      tags: [Notebooks]
+      operationId: createNotebook
+      summary: Create a Notebook
+      description: Creates a Notebook with a server-generated ID (UUIDv7).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotebookInput"
+            example:
+              name: Plants
+      responses:
+        "201":
+          description: Notebook created.
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Notebook"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/NotebookNameTaken"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+  /notebooks/{id}:
+    parameters:
+      - $ref: "#/components/parameters/NotebookId"
+    get:
+      tags: [Notebooks]
+      operationId: getNotebook
+      summary: Get a Notebook
+      responses:
+        "200":
+          description: The Notebook.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Notebook"
+        "400":
+          $ref: "#/components/responses/InvalidNotebookId"
+        "404":
+          $ref: "#/components/responses/NotebookNotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    put:
+      tags: [Notebooks]
+      operationId: putNotebook
+      summary: Create or rename a Notebook
+      description: Upsert with a client-chosen ID. If the ID does not exist, creates the Notebook (201). If it exists, changes the name (200) and keeps `created_at`. If the ID belongs to an archived Notebook, returns 409.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotebookInput"
+            example:
+              name: College
+      responses:
+        "200":
+          description: Existing Notebook renamed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Notebook"
+        "201":
+          description: Notebook created with the given ID.
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Notebook"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          description: The ID belongs to an archived Notebook, or another active Notebook already has the name.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+              examples:
+                archived:
+                  summary: Archived Notebook
+                  value:
+                    type: about:blank
+                    title: Conflict
+                    status: 409
+                    detail: Notebook 0190f3a1-0000-7000-8000-00000000d1a0 was archived.
+                nameTaken:
+                  summary: Name taken
+                  value:
+                    type: about:blank
+                    title: Conflict
+                    status: 409
+                    detail: A notebook named Plants already exists.
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    patch:
+      tags: [Notebooks]
+      operationId: updateNotebook
+      summary: Rename a Notebook
+      description: Changes only the fields in the body. A body with no fields (`{}` or only `null`) returns the Notebook unchanged.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotebookChanges"
+            example:
+              name: Studies
+      responses:
+        "200":
+          description: The Notebook after the change.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Notebook"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotebookNotFound"
+        "409":
+          $ref: "#/components/responses/NotebookNameTaken"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    delete:
+      tags: [Notebooks]
+      operationId: archiveNotebook
+      summary: Archive a Notebook
+      description: |-
+        Soft delete, even when the Notebook has Notes. The Notebook then returns 404, disappears from the list, and frees its name for another Notebook. There is no unarchive.
+
+        The Notebook's Notes do not change: they stay reachable through `/notes/{id}`, but `GET /notes?notebook=` with this Notebook returns 404.
+      responses:
+        "204":
+          description: Notebook archived.
+        "400":
+          $ref: "#/components/responses/InvalidNotebookId"
+        "404":
+          $ref: "#/components/responses/NotebookNotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+  /notes:
+    get:
+      tags: [Notes]
+      operationId: listNotes
+      summary: List the Timeline of Notes
+      description: |-
+        Returns the Notes of one Notebook that are not deleted, newest first, 50 per page. The Notebook is required: no Timeline mixes Notebooks.
+
+        The order is `date` descending by the start of its period, then finer precision first, then `created_at` descending, then `id` descending. A coarse Note comes at the start of its period: `2026-08-04` → `2026-08` → `2026-05-10T10:30` → `2026-05` → `2026`.
+
+        When there are more Notes, the `Link` header (RFC 8288) gives the next page with `rel="next"`. The last page has no `Link`. Pagination stays stable even when Notes are created or deleted between pages.
+      parameters:
+        - name: notebook
+          in: query
+          required: true
+          description: UUID of a Notebook that is not archived.
+          schema:
+            type: string
+            format: uuid
+          example: 0190f3a1-0000-7000-8000-00000000d1a0
+        - name: cursor
+          in: query
+          required: false
+          description: Opaque value taken from the `Link` of the previous page. Do not build or change it.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: One page of Notes, empty when there are none.
+          headers:
+            Link:
+              description: Next page, only when it exists.
+              schema:
+                type: string
+              example: </notes?notebook=0190f3a1-0000-7000-8000-00000000d1a0&cursor=WyIyMDI2LTA1IiwiMjAyNi0xMS0yM1QxMjowMDowMC4xMjM0NTZaIiwiMDE5MGYzYTItN2MxZS03YjNkLTlhNGYtMmM4ZTVkNmIxYTkwIl0>; rel="next"
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 50
+                items:
+                  $ref: "#/components/schemas/Note"
+        "400":
+          $ref: "#/components/responses/InvalidTimelineQuery"
+        "404":
+          $ref: "#/components/responses/NotebookNotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    post:
+      tags: [Notes]
+      operationId: createNote
+      summary: Create a Note
+      description: Creates a Note with a server-generated ID (UUIDv7).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NoteInput"
+            example:
+              notebook_id: 0190f3a1-0000-7000-8000-00000000d1a0
+              content: Lunch with **Ana**.
+              date: "2025-07-18T12"
+      responses:
+        "201":
+          description: Note created.
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+  /notes/{id}:
+    parameters:
+      - $ref: "#/components/parameters/NoteId"
+    get:
+      tags: [Notes]
+      operationId: getNote
+      summary: Get a Note
+      responses:
+        "200":
+          description: The Note.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+        "400":
+          $ref: "#/components/responses/InvalidNoteId"
+        "404":
+          $ref: "#/components/responses/NoteNotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    put:
+      tags: [Notes]
+      operationId: putNote
+      summary: Create or replace a Note
+      description: Upsert with a client-chosen ID. If the ID does not exist, creates the Note (201). If it exists, replaces `notebook_id`, `content`, and `date` (200) and keeps `created_at`; changing `notebook_id` moves the Note to another Notebook. If the ID belongs to a deleted Note, returns 409.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NoteInput"
+            example:
+              notebook_id: 0190f3a1-0000-7000-8000-00000000d1a0
+              content: Moved into the new apartment.
+              date: "2024-03"
+      responses:
+        "200":
+          description: Existing Note replaced.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+        "201":
+          description: Note created with the given ID.
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          description: The ID belongs to a deleted Note. Deleted Notes are not restored.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+              example:
+                type: about:blank
+                title: Conflict
+                status: 409
+                detail: Note 0190f3a2-7c1e-7b3d-9a4f-2c8e5d6b1a90 was deleted.
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    patch:
+      tags: [Notes]
+      operationId: updateNote
+      summary: Update part of a Note
+      description: |-
+        Changes only the fields in the body. `null` fields are ignored. Changing `notebook_id` moves the Note to another Notebook. Changing `date` can change the precision (for example, from `2025-07-18T15:35` to `2025-07`).
+
+        Any field present updates `updated_at`. A body with no fields (`{}` or only `null`) returns the Note unchanged.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NoteChanges"
+            example:
+              notebook_id: 0190f3a1-0000-7000-8000-00000000d1a0
+      responses:
+        "200":
+          description: The Note after the change.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NoteNotFound"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    delete:
+      tags: [Notes]
+      operationId: deleteNote
+      summary: Delete a Note
+      description: Soft delete. The Note then returns 404 on every endpoint and disappears from the Timeline. There is no restore.
+      responses:
+        "204":
+          description: Note deleted.
+        "400":
+          $ref: "#/components/responses/InvalidNoteId"
+        "404":
+          $ref: "#/components/responses/NoteNotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+  /devices:
+    post:
+      tags: [Devices]
+      operationId: login
+      summary: Log a Device in
+      description: |-
+        Checks the master password and creates a Device with a new token. The token appears only in this response; the server stores only its hash. The request's `User-Agent` is recorded on the Device.
+
+        After 5 wrong passwords in 15 minutes, the client IP gets 429 until the oldest failure leaves the window, even with the right password. The client IP is the last `X-Forwarded-For` entry, which the reverse proxy sets. Successful logins do not count.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+            example:
+              password: my master password
+              name: Laptop
+      responses:
+        "201":
+          description: Device logged in.
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthenticatedDevice"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/WrongPassword"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "429":
+          $ref: "#/components/responses/TooManyLogins"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    get:
+      tags: [Devices]
+      operationId: listDevices
+      summary: List logged-in Devices
+      description: Returns all Devices with access, in login order. The calling Device has `current` set to true. Tokens never appear.
+      responses:
+        "200":
+          description: List of Devices.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ListedDevice"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+  /devices/{id}:
+    parameters:
+      - $ref: "#/components/parameters/DeviceId"
+    delete:
+      tags: [Devices]
+      operationId: revokeDevice
+      summary: Revoke a Device
+      description: Deletes the Device, and its token stops working at once. With the calling Device's own ID, it works as a logout.
+      responses:
+        "204":
+          description: Device revoked.
+        "400":
+          $ref: "#/components/responses/InvalidDeviceId"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/DeviceNotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Opaque token in the format `jrnl_` followed by 43 base64url characters, obtained from `POST /devices`.
+  parameters:
+    DeviceId:
+      name: id
+      in: path
+      required: true
+      description: UUID of the Device.
+      schema:
+        type: string
+        format: uuid
+      example: 0190f3a3-1111-7000-8000-0000000de71c
+    TaskId:
+      name: id
+      in: path
+      required: true
+      description: UUID of the Task (RFC 9562, any version).
+      schema:
+        type: string
+        format: uuid
+      example: 0190f3a2-7c1e-7b3d-9a4f-2c8e5d6b1a90
+    NotebookId:
+      name: id
+      in: path
+      required: true
+      description: UUID of the Notebook (RFC 9562, any version).
+      schema:
+        type: string
+        format: uuid
+      example: 0190f3a1-0000-7000-8000-00000000d1a0
+    NoteId:
+      name: id
+      in: path
+      required: true
+      description: UUID of the Note (RFC 9562, any version).
+      schema:
+        type: string
+        format: uuid
+      example: 0190f3a2-7c1e-7b3d-9a4f-2c8e5d6b1a90
+  headers:
+    Location:
+      description: Path of the created resource.
+      schema:
+        type: string
+      example: /tasks/0190f3a2-7c1e-7b3d-9a4f-2c8e5d6b1a90
+  schemas:
+    TaskStatus:
+      type: string
+      enum: [todo, doing, done]
+      description: Any status can change to any other status.
+    Task:
+      type: object
+      required: [id, title, description, status, priority, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: [string, "null"]
+          maxLength: 10000
+        status:
+          $ref: "#/components/schemas/TaskStatus"
+        priority:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: 1 is the highest priority.
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      example:
+        id: 0190f3a2-7c1e-7b3d-9a4f-2c8e5d6b1a90
+        title: Buy milk
+        description: 2 liters
+        status: todo
+        priority: 1
+        created_at: "2026-11-22T14:00:00.000Z"
+        updated_at: "2026-11-22T14:00:00.000Z"
+    TaskInput:
+      type: object
+      description: Body for create or replace. Omitted or `null` fields get their default value.
+      additionalProperties: false
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Required. Leading and trailing whitespace is trimmed, and the limit applies after trimming.
+        description:
+          type: [string, "null"]
+          maxLength: 10000
+          default: null
+          description: Leading and trailing whitespace is trimmed. An empty or whitespace-only value becomes `null`.
+        status:
+          anyOf:
+            - $ref: "#/components/schemas/TaskStatus"
+            - type: "null"
+          default: todo
+        priority:
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 5
+          default: 3
+    TaskChanges:
+      type: object
+      description: Fields to change. Omitted or `null` fields stay as they are.
+      additionalProperties: false
+      properties:
+        title:
+          type: [string, "null"]
+          minLength: 1
+          maxLength: 200
+          description: Leading and trailing whitespace is trimmed. An empty or whitespace-only value is rejected.
+        description:
+          type: [string, "null"]
+          maxLength: 10000
+          description: Leading and trailing whitespace is trimmed. An empty or whitespace-only value clears the description.
+        status:
+          anyOf:
+            - $ref: "#/components/schemas/TaskStatus"
+            - type: "null"
+        priority:
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 5
+    PartialDate:
+      type: string
+      description: |-
+        A local wall-clock moment without a time zone, written as a reduced-precision ISO 8601 string. The format sets the precision: `YYYY` (year), `YYYY-MM` (month), `YYYY-MM-DD` (day), `YYYY-MM-DDTHH` (approximate hour), or `YYYY-MM-DDTHH:MM` (exact minute).
+
+        Only the canonical format is accepted: leading zeros, `T` as the separator, no seconds, and no time zone. The date must exist in the calendar and must not start after the current time in the server time zone; so the current year is valid. The year ranges from `0001` to `9999`.
+      pattern: ^\d{4}(-\d{2}(-\d{2}(T\d{2}(:\d{2})?)?)?)?$
+      examples: ["2025", "2025-07", "2025-07-18", "2025-07-18T15", "2025-07-18T15:35"]
+    NoteContent:
+      type: string
+      minLength: 1
+      maxLength: 10000
+      description: Raw Markdown, without a title. Leading and trailing whitespace is trimmed, and the limit applies after trimming. An empty or whitespace-only value is rejected.
+    NotebookName:
+      type: string
+      minLength: 1
+      maxLength: 20
+      description: Leading and trailing whitespace is trimmed, and the limit applies after trimming. An empty or whitespace-only value is rejected. Unique among Notebooks that are not archived, ignoring case.
+    Notebook:
+      type: object
+      required: [id, name, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          $ref: "#/components/schemas/NotebookName"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      example:
+        id: 0190f3a1-0000-7000-8000-00000000d1a0
+        name: Plants
+        created_at: "2026-11-22T14:00:00.000Z"
+        updated_at: "2026-11-22T14:00:00.000Z"
+    NotebookInput:
+      type: object
+      description: Body for create or replace.
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          $ref: "#/components/schemas/NotebookName"
+    NotebookChanges:
+      type: object
+      description: Fields to change. Omitted or `null` fields stay as they are.
+      additionalProperties: false
+      properties:
+        name:
+          anyOf:
+            - $ref: "#/components/schemas/NotebookName"
+            - type: "null"
+    NotebookReference:
+      type: string
+      format: uuid
+      description: UUID of a Notebook that is not archived. An unknown or archived Notebook is rejected with 400, even if the Note is already in it. To edit a Note of an archived Notebook with `PUT`, move it to an active Notebook; a `PATCH` without `notebook_id` keeps it where it is.
+    Note:
+      type: object
+      required: [id, notebook_id, content, date, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        notebook_id:
+          type: string
+          format: uuid
+          description: Can point to an archived Notebook, because archiving does not change the Notes.
+        content:
+          $ref: "#/components/schemas/NoteContent"
+        date:
+          $ref: "#/components/schemas/PartialDate"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      example:
+        id: 0190f3a2-7c1e-7b3d-9a4f-2c8e5d6b1a90
+        notebook_id: 0190f3a1-0000-7000-8000-00000000d1a0
+        content: Lunch with **Ana**.
+        date: "2025-07-18T12"
+        created_at: "2026-11-22T14:00:00.000Z"
+        updated_at: "2026-11-22T14:00:00.000Z"
+    NoteInput:
+      type: object
+      description: Body for create or replace. All fields are required.
+      additionalProperties: false
+      required: [notebook_id, content, date]
+      properties:
+        notebook_id:
+          $ref: "#/components/schemas/NotebookReference"
+        content:
+          $ref: "#/components/schemas/NoteContent"
+        date:
+          $ref: "#/components/schemas/PartialDate"
+    NoteChanges:
+      type: object
+      description: Fields to change. Omitted or `null` fields stay as they are.
+      additionalProperties: false
+      properties:
+        notebook_id:
+          anyOf:
+            - $ref: "#/components/schemas/NotebookReference"
+            - type: "null"
+        content:
+          anyOf:
+            - $ref: "#/components/schemas/NoteContent"
+            - type: "null"
+        date:
+          anyOf:
+            - $ref: "#/components/schemas/PartialDate"
+            - type: "null"
+    LoginInput:
+      type: object
+      additionalProperties: false
+      required: [password, name]
+      properties:
+        password:
+          type: string
+          minLength: 1
+          description: The master password.
+        name:
+          type: string
+          minLength: 1
+          maxLength: 50
+          description: Name of the Device, such as Laptop or iPhone. Leading and trailing whitespace is trimmed, and the limit applies after trimming. Duplicate names are allowed.
+    Device:
+      type: object
+      required: [id, name, user_agent, created_at, last_used_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        user_agent:
+          type: [string, "null"]
+          description: The `User-Agent` sent at login.
+        created_at:
+          type: string
+          format: date-time
+        last_used_at:
+          type: string
+          format: date-time
+          description: Last use of the token, with a resolution of 1 minute.
+    AuthenticatedDevice:
+      allOf:
+        - $ref: "#/components/schemas/Device"
+        - type: object
+          required: [token]
+          properties:
+            token:
+              type: string
+              pattern: ^jrnl_[A-Za-z0-9_-]{43}$
+              description: Store the token; it does not appear again.
+      example:
+        id: 0190f3a3-1111-7000-8000-0000000de71c
+        name: Laptop
+        user_agent: journal-tui/1.0
+        created_at: "2026-11-23T14:00:00.000Z"
+        last_used_at: "2026-11-23T14:00:00.000Z"
+        token: jrnl_q3V0bnVsbC1leGFtcGxlLXRva2VuLW5vdC1yZWFsMDA
+    ListedDevice:
+      allOf:
+        - $ref: "#/components/schemas/Device"
+        - type: object
+          required: [current]
+          properties:
+            current:
+              type: boolean
+              description: True for the calling Device.
+    Problem:
+      type: object
+      description: Problem details (RFC 9457).
+      required: [type, title, status, detail]
+      properties:
+        type:
+          type: string
+          const: about:blank
+        title:
+          type: string
+          description: Standard reason phrase of the HTTP status.
+        status:
+          type: integer
+        detail:
+          type: string
+    ValidationProblem:
+      allOf:
+        - $ref: "#/components/schemas/Problem"
+        - type: object
+          required: [errors]
+          properties:
+            errors:
+              type: array
+              items:
+                $ref: "#/components/schemas/FieldError"
+    FieldError:
+      type: object
+      required: [pointer, detail]
+      properties:
+        pointer:
+          type: string
+          description: JSON Pointer to the invalid field, as a URI fragment.
+          example: "#/title"
+        detail:
+          type: string
+  responses:
+    BadRequest:
+      description: |-
+        Invalid request. For invalid, unknown or read-only fields, `errors` lists each field. For malformed JSON or an ID that is not a UUID, the response has no `errors`.
+      content:
+        application/problem+json:
+          schema:
+            oneOf:
+              - $ref: "#/components/schemas/ValidationProblem"
+              - $ref: "#/components/schemas/Problem"
+          examples:
+            invalidFields:
+              summary: Invalid fields
+              value:
+                type: about:blank
+                title: Bad Request
+                status: 400
+                detail: The request body is invalid.
+                errors:
+                  - pointer: "#/title"
+                    detail: "Too small: expected string to have >=1 characters"
+                  - pointer: "#/color"
+                    detail: Unknown or read-only field.
+            malformedJson:
+              summary: Malformed JSON
+              value:
+                type: about:blank
+                title: Bad Request
+                status: 400
+                detail: The request body must be valid JSON.
+    InvalidTaskId:
+      description: The path ID is not a UUID.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          example:
+            type: about:blank
+            title: Bad Request
+            status: 400
+            detail: Task ID must be a UUID.
+    NotFound:
+      description: The Task does not exist or was deleted.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          example:
+            type: about:blank
+            title: Not Found
+            status: 404
+            detail: Task 0190f3a2-7c1e-7b3d-9a4f-2c8e5d6b1a90 does not exist.
+    InvalidNoteId:
+      description: The path ID is not a UUID.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          example:
+            type: about:blank
+            title: Bad Request
+            status: 400
+            detail: Note ID must be a UUID.
+    NoteNotFound:
+      description: The Note does not exist or was deleted.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          example:
+            type: about:blank
+            title: Not Found
+            status: 404
+            detail: Note 0190f3a2-7c1e-7b3d-9a4f-2c8e5d6b1a90 does not exist.
+    InvalidTimelineQuery:
+      description: The `notebook` parameter is missing or is not a UUID, or the cursor was not generated by the API or was changed.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          examples:
+            missingNotebook:
+              summary: Missing or invalid Notebook
+              value:
+                type: about:blank
+                title: Bad Request
+                status: 400
+                detail: The notebook query parameter must be a notebook UUID.
+            invalidCursor:
+              summary: Invalid cursor
+              value:
+                type: about:blank
+                title: Bad Request
+                status: 400
+                detail: The cursor is invalid.
+    InvalidNotebookId:
+      description: The path ID is not a UUID.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          example:
+            type: about:blank
+            title: Bad Request
+            status: 400
+            detail: Notebook ID must be a UUID.
+    NotebookNotFound:
+      description: The Notebook does not exist or was archived.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          example:
+            type: about:blank
+            title: Not Found
+            status: 404
+            detail: Notebook 0190f3a1-0000-7000-8000-00000000d1a0 does not exist.
+    NotebookNameTaken:
+      description: Another Notebook that is not archived already has this name, ignoring case.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          example:
+            type: about:blank
+            title: Conflict
+            status: 409
+            detail: A notebook named Plants already exists.
+    UnsupportedMediaType:
+      description: "The body does not use `Content-Type: application/json`."
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          example:
+            type: about:blank
+            title: Unsupported Media Type
+            status: 415
+            detail: The request body must have the application/json content type.
+    Unauthorized:
+      description: The Bearer token is missing, unknown or revoked. The `WWW-Authenticate` header includes `error="invalid_token"` when a token was sent.
+      headers:
+        WWW-Authenticate:
+          schema:
+            type: string
+          example: Bearer realm="journal", error="invalid_token"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          example:
+            type: about:blank
+            title: Unauthorized
+            status: 401
+            detail: The token is invalid or was revoked.
+    WrongPassword:
+      description: The master password is wrong. It counts as a failure for the login attempt limit.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          example:
+            type: about:blank
+            title: Unauthorized
+            status: 401
+            detail: The password is incorrect.
+    TooManyLogins:
+      description: The client IP sent a wrong password 5 times in the last 15 minutes.
+      headers:
+        Retry-After:
+          description: Seconds until the next attempt is accepted.
+          schema:
+            type: integer
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          example:
+            type: about:blank
+            title: Too Many Requests
+            status: 429
+            detail: Too many failed logins. Try again later.
+    InvalidDeviceId:
+      description: The path ID is not a UUID.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          example:
+            type: about:blank
+            title: Bad Request
+            status: 400
+            detail: Device ID must be a UUID.
+    DeviceNotFound:
+      description: The Device does not exist or was already revoked.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          example:
+            type: about:blank
+            title: Not Found
+            status: 404
+            detail: Device 0190f3a3-1111-7000-8000-0000000de71c does not exist.
+    InternalServerError:
+      description: Unexpected error. The response does not expose internal details.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          example:
+            type: about:blank
+            title: Internal Server Error
+            status: 500
+            detail: An unexpected error occurred.
