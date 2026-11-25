@@ -68,10 +68,10 @@ switch (decision.action) {
       console.log(`No previous release. Release v${candidate}.`);
       break;
     }
-    await writeNotes(
-      async () =>
-        (await $`${OASDIFF} changelog ${base} ${CONTRACT} --format markdown`.text()).trim() ||
-        "Only descriptions and examples changed.",
+    await writeNotes(async () =>
+      hasChanges
+        ? $`${OASDIFF} changelog ${base} ${CONTRACT} --format markdown`.text()
+        : "Only descriptions and examples changed.",
     );
     console.log(`Release v${candidate} (${bumpKind(latestVersion, candidate)} from ${tag}).`);
 }
