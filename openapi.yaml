@@ -1,11 +1,11 @@
 openapi: 3.1.0
 info:
   title: Journal API
-  version: 0.2.0
+  version: 0.2.1
   description: |-
     API for the Tasks, Notebooks, and Notes of a single owner.
 
-    Every request must send `Contract-Version` with the version of this contract that the Client was built with, and every response carries the version the API implements. The API checks this header before anything else, including authentication, unknown paths (404), unsupported methods (405) and the request content type (415): a missing or malformed value, or a version below the minimum, returns 400 with a `ContractVersionProblem` that names the minimum version. From 1.0.0 on, the minimum is the first version of the current major (`X.0.0`); while the contract is at 0.x, any valid version is accepted. Clients must ignore response fields they do not know, because new versions add fields.
+    Every request must send `Contract-Version` with the version of this contract that the Client was built with, and every response carries the version the API implements. A CORS preflight (`OPTIONS` with `Origin` and `Access-Control-Request-Method`) is exempt, because browsers never send custom headers in it. The API checks this header before anything else, including authentication, unknown paths (404), unsupported methods (405) and the request content type (415): a missing or malformed value, or a version below the minimum, returns 400 with a `ContractVersionProblem` that names the minimum version. From 1.0.0 on, the minimum is the first version of the current major (`X.0.0`); while the contract is at 0.x, any valid version is accepted. Clients must ignore response fields they do not know, because new versions add fields.
 
     Every endpoint except login (`POST /devices`) requires `Authorization: Bearer <token>`. Logging in with the master password returns a token for one Device. Tokens do not expire; a token stops working only when its Device is revoked with `DELETE /devices/{id}`. A missing, unknown or revoked token returns 401 with a `WWW-Authenticate` header, also on unknown paths.
 

@@ -24,6 +24,10 @@ _Avoid_: Fuzzy date, approximate date
 The Notes of one Notebook, ordered newest first by the start of their Partial Date.
 _Avoid_: Feed, history
 
+**Client**:
+An app that uses the API on behalf of the owner, such as the Android app or the web app.
+_Avoid_: Consumer, frontend
+
 **Device**:
-A client the owner logged in with the master password, identified by its own token.
-_Avoid_: Session, client
+One login of a Client by the owner with the master password, identified by its own token. Not the physical hardware: two Clients on one phone, or a second login from the same Client, are separate Devices.
+_Avoid_: Session
