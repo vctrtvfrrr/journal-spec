@@ -118,7 +118,7 @@ function compliantDocument(): Fixture {
         },
       },
       headers: {
-        ContractVersion: { description: "Contract version.", schema: { type: "string" } },
+        ContractVersion: { description: "Contract version.", required: true, schema: { type: "string" } },
       },
       schemas: {
         Task: { type: "object", properties: { id: { type: "integer" }, created_at: { type: "string" } } },
@@ -221,6 +221,11 @@ describe("guidelines", () => {
 
   it("G-07 rejects a response without the Contract-Version header", async () => {
     const ids = await violations((document) => delete document.paths["/tasks"].post.responses[201].headers);
+    expect(ids).toContain("journal/g07-contract-version-header");
+  });
+
+  it("G-07 rejects a Contract-Version header that is not required", async () => {
+    const ids = await violations((document) => delete document.components.headers.ContractVersion.required);
     expect(ids).toContain("journal/g07-contract-version-header");
   });
 

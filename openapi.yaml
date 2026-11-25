@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Journal API
-  version: 0.2.1
+  version: 0.3.0
   description: |-
     API for the Tasks, Notebooks, and Notes of a single owner.
 
@@ -809,10 +809,12 @@ components:
   headers:
     ContractVersion:
       description: Version of this contract that the API implements.
+      required: true
       schema:
         $ref: "#/components/schemas/ContractVersion"
     Location:
       description: Path of the created resource.
+      required: true
       schema:
         type: string
       example: /tasks/0190f3a2-7c1e-7b3d-9a4f-2c8e5d6b1a90
@@ -1336,6 +1338,7 @@ components:
         Contract-Version:
           $ref: "#/components/headers/ContractVersion"
         WWW-Authenticate:
+          required: true
           schema:
             type: string
           example: Bearer realm="journal", error="invalid_token"
@@ -1369,6 +1372,7 @@ components:
           $ref: "#/components/headers/ContractVersion"
         Retry-After:
           description: Seconds until the next attempt is accepted.
+          required: true
           schema:
             type: integer
       content:

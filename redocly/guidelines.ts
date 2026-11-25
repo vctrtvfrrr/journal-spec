@@ -1,4 +1,4 @@
-type Ref = { $ref?: string };
+type Ref = { $ref?: string; required?: boolean };
 
 type Schema = Ref & {
   anyOf?: Schema[];
@@ -136,10 +136,11 @@ function invalidAndUnknownId(): Visitor {
 
 function contractVersionHeader(): Visitor {
   return {
-    Response(response, { report, location }) {
-      if (response.headers?.["Contract-Version"]?.$ref === CONTRACT_VERSION_HEADER) return;
+    Response(response, { report, location, resolve }) {
+      const header = response.headers?.["Contract-Version"];
+      if (header?.$ref === CONTRACT_VERSION_HEADER && resolve(header).node?.required === true) return;
       report({
-        message: `G-07: every response references ${CONTRACT_VERSION_HEADER} as its Contract-Version header.`,
+        message: `G-07: every response references ${CONTRACT_VERSION_HEADER}, a required header, as its Contract-Version header.`,
         location: location.child("headers"),
       });
     },
