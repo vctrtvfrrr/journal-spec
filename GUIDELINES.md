@@ -6,7 +6,7 @@ House rules for `openapi.yaml`, on top of Redocly's `recommended-strict` ruleset
 
 **G-01: Errors are problem details.** Every 4xx and 5xx response uses `application/problem+json` with the `Problem`, `ValidationProblem` or `ContractVersionProblem` schema, alone or combined with `anyOf`. Use `anyOf`, not `oneOf`: a `ValidationProblem` is also a valid `Problem`, so `oneOf` rejects it.
 
-**G-02: Secured operations declare 401.** Every operation that requires a token declares a 401 response. Login (`security: []`) is the only exception.
+**G-02: Secured operations declare 401.** Every operation that requires a token declares a 401 response. Login and `GET /health` (`security: []`) are the exceptions.
 
 **G-03: Every operation declares 500.**
 
