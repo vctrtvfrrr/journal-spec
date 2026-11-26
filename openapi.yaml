@@ -13,6 +13,8 @@ info:
 
     After the version, the API checks authentication (401), then the origin of cookie requests (403), and only then unknown paths (404), unsupported methods (405) and the request content type (415).
 
+    Every ID is a UUIDv7 (RFC 9562), the primary key of every table: Tasks, Notebooks, Notes, and Devices. This holds for the IDs that the API generates and for the IDs that a Client generates for an upsert (`PUT`). The API rejects a UUID of any other version, such as a UUIDv4, with 400.
+
     Request bodies must use `Content-Type: application/json`. In any writable field, `null` is the same as omitting the field. Unknown or read-only fields (`id`, `created_at`, `updated_at`, `deleted_at`) are rejected with 400, even when their value is `null`.
 
     Errors use RFC 9457 problem details (`application/problem+json`). An unknown path returns 404. An unsupported method on a known path returns 405 with an `Allow` header.
@@ -150,7 +152,7 @@ paths:
       operationId: putTask
       summary: Create or replace a Task
       description: |-
-        Upsert with a client-chosen ID.
+        Upsert with a client-generated UUIDv7 ID.
 
         If the ID does not exist, creates the Task (201). If it exists, replaces the whole Task (200): omitted or `null` fields return to their defaults, and `created_at` is kept. If the ID belongs to a deleted Task, returns 409.
       requestBody:
@@ -359,7 +361,7 @@ paths:
       tags: [Notebooks]
       operationId: putNotebook
       summary: Create or rename a Notebook
-      description: Upsert with a client-chosen ID. If the ID does not exist, creates the Notebook (201). If it exists, changes the name (200) and keeps `created_at`. If the ID belongs to an archived Notebook, returns 409.
+      description: Upsert with a client-generated UUIDv7 ID. If the ID does not exist, creates the Notebook (201). If it exists, changes the name (200) and keeps `created_at`. If the ID belongs to an archived Notebook, returns 409.
       requestBody:
         required: true
         content:
@@ -501,10 +503,9 @@ paths:
         - name: notebook
           in: query
           required: true
-          description: UUID of a Notebook that is not archived.
+          description: ID of a Notebook that is not archived.
           schema:
-            type: string
-            format: uuid
+            $ref: "#/components/schemas/Uuidv7"
           example: 0190f3a1-0000-7000-8000-00000000d1a0
         - name: cursor
           in: query
@@ -605,7 +606,7 @@ paths:
       tags: [Notes]
       operationId: putNote
       summary: Create or replace a Note
-      description: Upsert with a client-chosen ID. If the ID does not exist, creates the Note (201). If it exists, replaces `notebook_id`, `content`, and `date` (200) and keeps `created_at`; changing `notebook_id` moves the Note to another Notebook. If the ID belongs to a deleted Note, returns 409.
+      description: Upsert with a client-generated UUIDv7 ID. If the ID does not exist, creates the Note (201). If it exists, replaces `notebook_id`, `content`, and `date` (200) and keeps `created_at`; changing `notebook_id` moves the Note to another Notebook. If the ID belongs to a deleted Note, returns 409.
       requestBody:
         required: true
         content:
@@ -887,37 +888,33 @@ components:
       name: id
       in: path
       required: true
-      description: UUID of the Device.
+      description: ID of the Device.
       schema:
-        type: string
-        format: uuid
+        $ref: "#/components/schemas/Uuidv7"
       example: 0190f3a3-1111-7000-8000-0000000de71c
     TaskId:
       name: id
       in: path
       required: true
-      description: UUID of the Task (RFC 9562, any version).
+      description: ID of the Task. For `PUT`, the Client generates it, and it must be a UUIDv7.
       schema:
-        type: string
-        format: uuid
+        $ref: "#/components/schemas/Uuidv7"
       example: 0190f3a2-7c1e-7b3d-9a4f-2c8e5d6b1a90
     NotebookId:
       name: id
       in: path
       required: true
-      description: UUID of the Notebook (RFC 9562, any version).
+      description: ID of the Notebook. For `PUT`, the Client generates it, and it must be a UUIDv7.
       schema:
-        type: string
-        format: uuid
+        $ref: "#/components/schemas/Uuidv7"
       example: 0190f3a1-0000-7000-8000-00000000d1a0
     NoteId:
       name: id
       in: path
       required: true
-      description: UUID of the Note (RFC 9562, any version).
+      description: ID of the Note. For `PUT`, the Client generates it, and it must be a UUIDv7.
       schema:
-        type: string
-        format: uuid
+        $ref: "#/components/schemas/Uuidv7"
       example: 0190f3a2-7c1e-7b3d-9a4f-2c8e5d6b1a90
     ContractVersion:
       name: Contract-Version
@@ -955,6 +952,12 @@ components:
       description: A version of this contract (`info.version`), in Semantic Versioning `MAJOR.MINOR.PATCH`.
       pattern: ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$
       example: 0.2.0
+    Uuidv7:
+      type: string
+      format: uuid
+      pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$
+      description: A UUID version 7 (RFC 9562) in its 36-character hyphenated form. Every ID in this API is a UUIDv7, because it is the primary key of every table. Any other version, such as a UUIDv4, is rejected with 400. Hex digits are accepted in either case, and the API always returns them in lowercase.
+      example: 0190f3a2-7c1e-7b3d-9a4f-2c8e5d6b1a90
     TaskStatus:
       type: string
       enum: [todo, doing, done]
@@ -964,8 +967,7 @@ components:
       required: [id, title, description, status, priority, created_at, updated_at]
       properties:
         id:
-          type: string
-          format: uuid
+          $ref: "#/components/schemas/Uuidv7"
         title:
           type: string
           minLength: 1
@@ -1065,8 +1067,7 @@ components:
       required: [id, name, created_at, updated_at]
       properties:
         id:
-          type: string
-          format: uuid
+          $ref: "#/components/schemas/Uuidv7"
         name:
           $ref: "#/components/schemas/NotebookName"
         created_at:
@@ -1098,19 +1099,16 @@ components:
             - $ref: "#/components/schemas/NotebookName"
             - type: "null"
     NotebookReference:
-      type: string
-      format: uuid
-      description: UUID of a Notebook that is not archived. An unknown or archived Notebook is rejected with 400, even if the Note is already in it. To edit a Note of an archived Notebook with `PUT`, move it to an active Notebook; a `PATCH` without `notebook_id` keeps it where it is.
+      $ref: "#/components/schemas/Uuidv7"
+      description: ID of a Notebook that is not archived. An unknown or archived Notebook is rejected with 400, even if the Note is already in it. To edit a Note of an archived Notebook with `PUT`, move it to an active Notebook; a `PATCH` without `notebook_id` keeps it where it is.
     Note:
       type: object
       required: [id, notebook_id, content, date, created_at, updated_at]
       properties:
         id:
-          type: string
-          format: uuid
+          $ref: "#/components/schemas/Uuidv7"
         notebook_id:
-          type: string
-          format: uuid
+          $ref: "#/components/schemas/Uuidv7"
           description: Can point to an archived Notebook, because archiving does not change the Notes.
         content:
           $ref: "#/components/schemas/NoteContent"
@@ -1182,8 +1180,7 @@ components:
       required: [id, name, user_agent, created_at, last_used_at]
       properties:
         id:
-          type: string
-          format: uuid
+          $ref: "#/components/schemas/Uuidv7"
         name:
           type: string
         user_agent:
@@ -1303,7 +1300,7 @@ components:
         Contract-Version:
           $ref: "#/components/headers/ContractVersion"
       description: |-
-        Invalid request. For invalid, unknown or read-only fields, `errors` lists each field. For malformed JSON or an ID that is not a UUID, the response has no `errors`. A rejected `Contract-Version` header returns a `ContractVersionProblem`.
+        Invalid request. For invalid, unknown or read-only fields, `errors` lists each field. For malformed JSON or an ID that is not a UUIDv7, the response has no `errors`. A rejected `Contract-Version` header returns a `ContractVersionProblem`.
       content:
         application/problem+json:
           schema:
@@ -1335,7 +1332,7 @@ components:
       headers:
         Contract-Version:
           $ref: "#/components/headers/ContractVersion"
-      description: The path ID is not a UUID, or the `Contract-Version` header is rejected.
+      description: The path ID is not a UUIDv7, or the `Contract-Version` header is rejected.
       content:
         application/problem+json:
           schema:
@@ -1346,7 +1343,7 @@ components:
             type: about:blank
             title: Bad Request
             status: 400
-            detail: Task ID must be a UUID.
+            detail: Task ID must be a UUIDv7.
     NotFound:
       headers:
         Contract-Version:
@@ -1365,7 +1362,7 @@ components:
       headers:
         Contract-Version:
           $ref: "#/components/headers/ContractVersion"
-      description: The path ID is not a UUID, or the `Contract-Version` header is rejected.
+      description: The path ID is not a UUIDv7, or the `Contract-Version` header is rejected.
       content:
         application/problem+json:
           schema:
@@ -1376,7 +1373,7 @@ components:
             type: about:blank
             title: Bad Request
             status: 400
-            detail: Note ID must be a UUID.
+            detail: Note ID must be a UUIDv7.
     NoteNotFound:
       headers:
         Contract-Version:
@@ -1395,7 +1392,7 @@ components:
       headers:
         Contract-Version:
           $ref: "#/components/headers/ContractVersion"
-      description: The `notebook` parameter is missing or is not a UUID, or the cursor was not generated by the API or was changed, or the `Contract-Version` header is rejected.
+      description: The `notebook` parameter is missing or is not a UUIDv7, or the cursor was not generated by the API or was changed, or the `Contract-Version` header is rejected.
       content:
         application/problem+json:
           schema:
@@ -1409,7 +1406,7 @@ components:
                 type: about:blank
                 title: Bad Request
                 status: 400
-                detail: The notebook query parameter must be a notebook UUID.
+                detail: The notebook query parameter must be a Notebook UUIDv7.
             invalidCursor:
               summary: Invalid cursor
               value:
@@ -1421,7 +1418,7 @@ components:
       headers:
         Contract-Version:
           $ref: "#/components/headers/ContractVersion"
-      description: The path ID is not a UUID, or the `Contract-Version` header is rejected.
+      description: The path ID is not a UUIDv7, or the `Contract-Version` header is rejected.
       content:
         application/problem+json:
           schema:
@@ -1432,7 +1429,7 @@ components:
             type: about:blank
             title: Bad Request
             status: 400
-            detail: Notebook ID must be a UUID.
+            detail: Notebook ID must be a UUIDv7.
     NotebookNotFound:
       headers:
         Contract-Version:
@@ -1545,7 +1542,7 @@ components:
       headers:
         Contract-Version:
           $ref: "#/components/headers/ContractVersion"
-      description: The path ID is not a UUID, or the `Contract-Version` header is rejected.
+      description: The path ID is not a UUIDv7, or the `Contract-Version` header is rejected.
       content:
         application/problem+json:
           schema:
@@ -1556,7 +1553,7 @@ components:
             type: about:blank
             title: Bad Request
             status: 400
-            detail: Device ID must be a UUID.
+            detail: Device ID must be a UUIDv7.
     DeviceNotFound:
       headers:
         Contract-Version:

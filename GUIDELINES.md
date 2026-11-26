@@ -12,9 +12,13 @@ House rules for `openapi.yaml`, on top of Redocly's `recommended-strict` ruleset
 
 **G-05: Operations with a request body declare 415.**
 
-**G-06: Operations on a path with an ID declare 400 and 404.** The 400 covers an ID that is not a UUID. An upsert (`PUT`) declares no 404, because a missing ID creates the resource.
+**G-06: Operations on a path with an ID declare 400 and 404.** The 400 covers an ID that is not a UUIDv7. An upsert (`PUT`) declares no 404, because a missing ID creates the resource.
 
 **G-10: Operations that change data declare 403.** Every POST, PUT, PATCH and DELETE operation declares a 403 response, login included, for a cookie request that does not come from a trusted origin. See [ADR 0002](docs/adr/0002-token-in-httponly-cookie-for-browser-clients.md).
+
+## IDs
+
+**G-11: Every ID is a UUIDv7.** The primary key of every table is a UUIDv7, so every ID in the contract (path parameters, query parameters, and `id` or `*_id` properties) references the `Uuidv7` schema, which accepts only version 7 (RFC 9562). A `format: uuid` without the UUIDv7 pattern fails the lint, because it accepts any version.
 
 ## Request bodies
 

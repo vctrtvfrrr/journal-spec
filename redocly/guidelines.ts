@@ -1,6 +1,8 @@
 type Ref = { $ref?: string; required?: boolean };
 
 type Schema = Ref & {
+  format?: string;
+  pattern?: string;
   anyOf?: Schema[];
   oneOf?: Schema[];
   additionalProperties?: unknown;
@@ -41,6 +43,7 @@ type Visitor = {
   RequestBody?: (requestBody: { content?: Record<string, MediaType> }, context: Context) => void;
   Response?: (response: Response, context: Context) => void;
   MediaType?: (mediaType: MediaType, context: Context) => void;
+  Schema?: (schema: Schema, context: Context) => void;
 };
 
 const HTTP_METHODS = ["get", "put", "post", "delete", "options", "head", "patch", "trace"] as const;
@@ -51,6 +54,7 @@ const PROBLEM_SCHEMA = /^#\/components\/schemas\/(Problem|ValidationProblem|Cont
 const CONTRACT_VERSION_HEADER = "#/components/headers/ContractVersion";
 const CONTRACT_VERSION_PARAMETER = "#/components/parameters/ContractVersion";
 const CONTRACT_VERSION_PROBLEM = "#/components/schemas/ContractVersionProblem";
+const UUIDV7_PATTERN = "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$";
 
 function schemaRefs(schema: Schema | undefined): string[] {
   if (schema?.$ref) return [schema.$ref];
@@ -201,6 +205,18 @@ function forbidden(): Visitor {
   };
 }
 
+function uuidv7(): Visitor {
+  return {
+    Schema(schema, { report, location }) {
+      if (schema.format !== "uuid" || schema.pattern === UUIDV7_PATTERN) return;
+      report({
+        message: "G-11: a uuid schema has the UUIDv7 pattern; reference #/components/schemas/Uuidv7.",
+        location: location.child("format"),
+      });
+    },
+  };
+}
+
 export default function guidelines() {
   return {
     id: "journal",
@@ -215,6 +231,7 @@ export default function guidelines() {
         "g08-contract-version-parameter": contractVersionParameter,
         "g08-contract-version-problem": contractVersionProblem,
         "g10-forbidden": forbidden,
+        "g11-uuidv7": uuidv7,
       },
     },
   };

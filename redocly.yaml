@@ -61,3 +61,4 @@ rules:
     message: "G-09: property names are snake_case."
 
   journal/g10-forbidden: error
+  journal/g11-uuidv7: error

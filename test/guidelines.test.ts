@@ -271,6 +271,19 @@ describe("guidelines", () => {
     expect(ids).toContain("rule/g09-property-casing");
   });
 
+  it("G-11 rejects an ID that declares format uuid instead of referencing Uuidv7", async () => {
+    const ids = await violations((document) => (document.components.schemas.Task.properties.id = { type: "string", format: "uuid" }));
+    expect(ids).toContain("journal/g11-uuidv7");
+  });
+
+  it("G-11 rejects a Uuidv7 schema that accepts any UUID version", async () => {
+    const ids = await violations((document) => {
+      document.components.schemas.Uuidv7 = { type: "string", format: "uuid" };
+      document.components.schemas.Task.properties.id = schemaRef("Uuidv7");
+    });
+    expect(ids).toContain("journal/g11-uuidv7");
+  });
+
   it("G-10 rejects an operation that changes data but lacks 403", async () => {
     const ids = await violations((document) => delete document.paths["/tasks"].post.responses[403]);
     expect(ids).toContain("journal/g10-forbidden");
