@@ -17,7 +17,7 @@ A Markdown entry in a Notebook, placed in time by a Partial Date.
 _Avoid_: Entry, post
 
 **Partial Date**:
-A local wall-clock moment known only to a given precision: year, month, day, hour, or minute.
+A local wall-clock moment known only to a given precision: year, month, day, hour, or minute. It covers the whole period of its precision, so `2025-05` is all of May 2025, and it matches a date range when its period overlaps the range.
 _Avoid_: Fuzzy date, approximate date
 
 **Timeline**:

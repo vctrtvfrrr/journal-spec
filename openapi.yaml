@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Journal API
-  version: 0.5.0
+  version: 0.6.0
   description: |-
     API for the Tasks, Notebooks, and Notes of a single owner.
 
@@ -498,7 +498,11 @@ paths:
 
         The order is `date` descending by the start of its period, then finer precision first, then `created_at` descending, then `id` descending. A coarse Note comes at the start of its period: `2026-08-04` → `2026-08` → `2026-05-10T10:30` → `2026-05` → `2026`.
 
-        When there are more Notes, the `Link` header (RFC 8288) gives the next page with `rel="next"`. The last page has no `Link`. Pagination stays stable even when Notes are created or deleted between pages.
+        `q`, `from` and `to` filter the Timeline and combine with a logical AND. The order and the page size stay the same.
+
+        The `Link` header (RFC 8288) gives the next page, with older Notes, as `rel="next"`, and the previous page, with newer Notes, as `rel="prev"`. Each link exists only when there are Notes in that direction, and the header is absent when neither exists. A previous page also comes newest first. `to` limits only the first page, the one without `cursor`: it sets where the Timeline starts. Pages reached through a cursor, in both directions, hold the Notes that match `q` and `from`, so a Timeline that started with `to` can go back up to the newest Note and then down again without skipping Notes. Without `to`, the first page has no `rel="prev"`. A first page with `to` has `rel="prev"` when Notes after `to` match `q` and `from`, even when the page itself is empty. Pagination stays stable even when Notes are created or deleted between pages.
+
+        The links repeat `notebook`, `q`, `from` and `to` next to `cursor`. Follow them as given: a cursor sent with filters different from those of the page that produced it returns 400.
       parameters:
         - name: notebook
           in: query
@@ -510,9 +514,38 @@ paths:
         - name: cursor
           in: query
           required: false
-          description: Opaque value taken from the `Link` of the previous page. Do not build or change it.
+          description: Opaque value taken from the `Link` of another page. It also sets the direction (`next` or `prev`). Do not build or change it, and send it with the same `q`, `from` and `to` as the page that produced it.
           schema:
             type: string
+        - name: q
+          in: query
+          required: false
+          description: Text to search for. A Note matches when its `content`, the raw Markdown, contains the text at any position, ignoring case and diacritics, so `cafe` matches `Café`. Leading and trailing whitespace is trimmed, and the limit applies after trimming. An empty or whitespace-only value is rejected.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+          example: cafe
+        - name: from
+          in: query
+          required: false
+          description: |-
+            Start of the date range: the start of this Partial Date's period, so `from=2025-03` starts at `2025-03-01T00:00`.
+
+            A Note matches when the period of its `date` overlaps the range, even partially. A coarse date means that the moment is uncertain and can be inside the range: a Note on `2025-05` (all of May) matches a range from `2025-05-10` to `2025-06-30`, and a Note on `2025` matches any range that touches 2025.
+          schema:
+            $ref: "#/components/schemas/PartialDateBound"
+          example: "2025-03"
+        - name: to
+          in: query
+          required: false
+          description: |-
+            End of the date range: the end of this Partial Date's period, so `to=2025` ends with the minute `2025-12-31T23:59`, and `from=2025&to=2025` covers all of 2025. It must not end before `from` starts.
+
+            The overlap rule of `from` applies. `to` limits only the first page, the one without `cursor`; see the operation description.
+          schema:
+            $ref: "#/components/schemas/PartialDateBound"
+          example: "2025-06-30"
       responses:
         "200":
           description: One page of Notes, empty when there are none.
@@ -520,10 +553,10 @@ paths:
             Contract-Version:
               $ref: "#/components/headers/ContractVersion"
             Link:
-              description: Next page, only when it exists.
+              description: Next page (`rel="next"`) and previous page (`rel="prev"`), each only when it exists, with the same `notebook`, `q`, `from` and `to` as the request.
               schema:
                 type: string
-              example: </notes?notebook=0190f3a1-0000-7000-8000-00000000d1a0&cursor=WyIyMDI2LTA1IiwiMjAyNi0xMS0yM1QxMjowMDowMC4xMjM0NTZaIiwiMDE5MGYzYTItN2MxZS03YjNkLTlhNGYtMmM4ZTVkNmIxYTkwIl0>; rel="next"
+              example: </notes?notebook=0190f3a1-0000-7000-8000-00000000d1a0&q=cafe&to=2025-06-30&cursor=WyJuZXh0IiwiMjAyNS0wNSIsIjIwMjYtMTEtMjNUMTI6MDA6MDAuMTIzNDU2WiIsIjAxOTBmM2EyLTdjMWUtN2IzZC05YTRmLTJjOGU1ZDZiMWE5MCIsIjdjM2Y5YTFlIl0>; rel="next", </notes?notebook=0190f3a1-0000-7000-8000-00000000d1a0&q=cafe&to=2025-06-30&cursor=WyJwcmV2IiwiMjAyNS0wNi0yMCIsIjIwMjYtMTEtMjNUMTI6MDA6MDAuMTIzNDU2WiIsIjAxOTBmM2EyLTdjMWUtN2IzZC05YTRmLTJjOGU1ZDZiMWE5MSIsIjdjM2Y5YTFlIl0>; rel="prev"
           content:
             application/json:
               schema:
@@ -1052,6 +1085,11 @@ components:
         Only the canonical format is accepted: leading zeros, `T` as the separator, no seconds, and no time zone. The date must exist in the calendar and must not start after the current time in the server time zone; so the current year is valid. The year ranges from `0001` to `9999`.
       pattern: ^\d{4}(-\d{2}(-\d{2}(T\d{2}(:\d{2})?)?)?)?$
       examples: ["2025", "2025-07", "2025-07-18", "2025-07-18T15", "2025-07-18T15:35"]
+    PartialDateBound:
+      type: string
+      description: A bound of a date range, in the format of a `PartialDate`. Only the canonical format is accepted, and the date must exist in the calendar, but it may be in the future, so `2026-12` is valid before the month ends. The year ranges from `0001` to `9999`.
+      pattern: ^\d{4}(-\d{2}(-\d{2}(T\d{2}(:\d{2})?)?)?)?$
+      examples: ["2025", "2025-07", "2025-07-18", "2025-07-18T15", "2025-07-18T15:35"]
     NoteContent:
       type: string
       minLength: 1
@@ -1392,7 +1430,7 @@ components:
       headers:
         Contract-Version:
           $ref: "#/components/headers/ContractVersion"
-      description: The `notebook` parameter is missing or is not a UUIDv7, or the cursor was not generated by the API or was changed, or the `Contract-Version` header is rejected.
+      description: The `notebook` parameter is missing or is not a UUIDv7; `q` is empty or too long; `from` or `to` is not in the canonical format or does not exist in the calendar; `from` starts after the end of `to`; the cursor was not generated by the API, was changed, or comes with filters different from those of the page that produced it; or the `Contract-Version` header is rejected.
       content:
         application/problem+json:
           schema:
@@ -1414,6 +1452,34 @@ components:
                 title: Bad Request
                 status: 400
                 detail: The cursor is invalid.
+            invalidSearch:
+              summary: Empty or too long search text
+              value:
+                type: about:blank
+                title: Bad Request
+                status: 400
+                detail: The q query parameter must have 1 to 200 characters.
+            invalidDateBound:
+              summary: Date bound not canonical or not in the calendar
+              value:
+                type: about:blank
+                title: Bad Request
+                status: 400
+                detail: The from query parameter must be a Partial Date that exists, such as 2025-03.
+            invertedDateRange:
+              summary: Range starts after it ends
+              value:
+                type: about:blank
+                title: Bad Request
+                status: 400
+                detail: The from query parameter must not start after the end of to.
+            cursorFilterMismatch:
+              summary: Cursor sent with different filters
+              value:
+                type: about:blank
+                title: Bad Request
+                status: 400
+                detail: The cursor belongs to a page with different q, from or to.
     InvalidNotebookId:
       headers:
         Contract-Version:
