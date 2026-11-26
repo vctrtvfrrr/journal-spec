@@ -55,6 +55,7 @@ function compliantDocument(): Fixture {
               content: { "application/json": { schema: { $ref: "#/components/schemas/Task" } } },
             },
             400: { $ref: "#/components/responses/BadRequest" },
+            403: { $ref: "#/components/responses/Forbidden" },
             415: { $ref: "#/components/responses/UnsupportedMediaType" },
             500: { $ref: "#/components/responses/InternalServerError" },
           },
@@ -78,6 +79,7 @@ function compliantDocument(): Fixture {
             },
             400: { $ref: "#/components/responses/BadRequest" },
             401: { $ref: "#/components/responses/Unauthorized" },
+            403: { $ref: "#/components/responses/Forbidden" },
             415: { $ref: "#/components/responses/UnsupportedMediaType" },
             500: { $ref: "#/components/responses/InternalServerError" },
           },
@@ -131,6 +133,7 @@ function compliantDocument(): Fixture {
         [
           ["BadRequest", ["ValidationProblem", "ContractVersionProblem"]],
           ["Unauthorized", ["Problem"]],
+          ["Forbidden", ["Problem"]],
           ["NotFound", ["Problem"]],
           ["UnsupportedMediaType", ["Problem"]],
           ["InternalServerError", ["Problem"]],
@@ -255,5 +258,15 @@ describe("guidelines", () => {
   it("G-09 rejects a property name that is not snake_case", async () => {
     const ids = await violations((document) => (document.components.schemas.Task.properties.createdAt = { type: "string" }));
     expect(ids).toContain("rule/g09-property-casing");
+  });
+
+  it("G-10 rejects an operation that changes data but lacks 403", async () => {
+    const ids = await violations((document) => delete document.paths["/tasks"].post.responses[403]);
+    expect(ids).toContain("journal/g10-forbidden");
+  });
+
+  it("G-10 rejects a login without 403", async () => {
+    const ids = await violations((document) => delete document.paths["/devices"].post.responses[403]);
+    expect(ids).toContain("journal/g10-forbidden");
   });
 });

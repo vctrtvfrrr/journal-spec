@@ -44,6 +44,7 @@ type Visitor = {
 
 const HTTP_METHODS = ["get", "put", "post", "delete", "options", "head", "patch", "trace"] as const;
 type HttpMethod = (typeof HTTP_METHODS)[number];
+const DATA_CHANGING_METHODS: readonly HttpMethod[] = ["post", "put", "patch", "delete"];
 
 const PROBLEM_SCHEMA = /^#\/components\/schemas\/(Problem|ValidationProblem|ContractVersionProblem)$/;
 const CONTRACT_VERSION_HEADER = "#/components/headers/ContractVersion";
@@ -179,6 +180,21 @@ function contractVersionProblem(): Visitor {
   };
 }
 
+function forbidden(): Visitor {
+  return {
+    PathItem(pathItem, { report, location }) {
+      for (const method of DATA_CHANGING_METHODS) {
+        const responses = pathItem[method]?.responses;
+        if (!responses || responses["403"]) continue;
+        report({
+          message: "G-10: operations with POST, PUT, PATCH or DELETE declare a 403 response.",
+          location: location.child([method, "responses"]),
+        });
+      }
+    },
+  };
+}
+
 export default function guidelines() {
   return {
     id: "journal",
@@ -192,6 +208,7 @@ export default function guidelines() {
         "g07-contract-version-header": contractVersionHeader,
         "g08-contract-version-parameter": contractVersionParameter,
         "g08-contract-version-problem": contractVersionProblem,
+        "g10-forbidden": forbidden,
       },
     },
   };

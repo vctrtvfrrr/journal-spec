@@ -1,13 +1,17 @@
 openapi: 3.1.0
 info:
   title: Journal API
-  version: 0.3.0
+  version: 0.4.0
   description: |-
     API for the Tasks, Notebooks, and Notes of a single owner.
 
     Every request must send `Contract-Version` with the version of this contract that the Client was built with, and every response carries the version the API implements. A CORS preflight (`OPTIONS` with `Origin` and `Access-Control-Request-Method`) is exempt, because browsers never send custom headers in it. The API checks this header before anything else, including authentication, unknown paths (404), unsupported methods (405) and the request content type (415): a missing or malformed value, or a version below the minimum, returns 400 with a `ContractVersionProblem` that names the minimum version. From 1.0.0 on, the minimum is the first version of the current major (`X.0.0`); while the contract is at 0.x, any valid version is accepted. Clients must ignore response fields they do not know, because new versions add fields.
 
-    Every endpoint except login (`POST /devices`) requires `Authorization: Bearer <token>`. Logging in with the master password returns a token for one Device. Tokens do not expire; a token stops working only when its Device is revoked with `DELETE /devices/{id}`. A missing, unknown or revoked token returns 401 with a `WWW-Authenticate` header, also on unknown paths.
+    Every endpoint except login (`POST /devices`) requires the token of a Device. Logging in with the master password creates a Device with its own token, delivered in one of two ways. Native Clients get the token in the response body and send it as `Authorization: Bearer <token>`. Browser Clients log in with `token_delivery: cookie`, and the browser then sends the token in the `__Host-journal_token` cookie, which is `HttpOnly`, so JavaScript never sees it. A request with an `Authorization` header is authenticated by that header, and the cookie is ignored. Tokens do not expire; a token stops working only when its Device is revoked with `DELETE /devices/{id}` or `DELETE /devices/current`. A missing, unknown or revoked token returns 401 with a `WWW-Authenticate` header, also on unknown paths.
+
+    A request authenticated by the cookie that uses POST, PUT, PATCH or DELETE, and a login with `token_delivery: cookie`, must come from a trusted origin: `Sec-Fetch-Site` must be `same-origin`, or `same-site` with an `Origin` on the API's list of trusted origins. That list is deployment configuration, and it also decides which origins get CORS responses with credentials. Otherwise, also when `Sec-Fetch-Site` is missing, the API returns 403. Requests with a Bearer token skip this check. The cookie works only when the web Client and the API share a registrable domain: the same host, or sibling subdomains.
+
+    After the version, the API checks authentication (401), then the origin of cookie requests (403), and only then unknown paths (404), unsupported methods (405) and the request content type (415).
 
     Request bodies must use `Content-Type: application/json`. In any writable field, `null` is the same as omitting the field. Unknown or read-only fields (`id`, `created_at`, `updated_at`, `deleted_at`) are rejected with 400, even when their value is `null`.
 
@@ -17,6 +21,7 @@ servers:
     description: Local development
 security:
   - bearerAuth: []
+  - cookieAuth: []
 tags:
   - name: Tasks
     description: Tasks with a title, description, status, and priority.
@@ -82,6 +87,8 @@ paths:
                 $ref: "#/components/schemas/Task"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "415":
           $ref: "#/components/responses/UnsupportedMediaType"
         "401":
@@ -154,6 +161,8 @@ paths:
                 $ref: "#/components/schemas/Task"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "409":
           headers:
             Contract-Version:
@@ -202,6 +211,8 @@ paths:
                 $ref: "#/components/schemas/Task"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "415":
@@ -223,6 +234,8 @@ paths:
           description: Task deleted.
         "400":
           $ref: "#/components/responses/InvalidTaskId"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "401":
@@ -282,6 +295,8 @@ paths:
                 $ref: "#/components/schemas/Notebook"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "409":
           $ref: "#/components/responses/NotebookNameTaken"
         "415":
@@ -352,6 +367,8 @@ paths:
                 $ref: "#/components/schemas/Notebook"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "409":
           headers:
             Contract-Version:
@@ -407,6 +424,8 @@ paths:
                 $ref: "#/components/schemas/Notebook"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotebookNotFound"
         "409":
@@ -433,6 +452,8 @@ paths:
           description: Notebook archived.
         "400":
           $ref: "#/components/responses/InvalidNotebookId"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotebookNotFound"
         "401":
@@ -522,6 +543,8 @@ paths:
                 $ref: "#/components/schemas/Note"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "415":
           $ref: "#/components/responses/UnsupportedMediaType"
         "401":
@@ -592,6 +615,8 @@ paths:
                 $ref: "#/components/schemas/Note"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "409":
           headers:
             Contract-Version:
@@ -640,6 +665,8 @@ paths:
                 $ref: "#/components/schemas/Note"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NoteNotFound"
         "415":
@@ -661,6 +688,8 @@ paths:
           description: Note deleted.
         "400":
           $ref: "#/components/responses/InvalidNoteId"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NoteNotFound"
         "401":
@@ -675,7 +704,9 @@ paths:
       operationId: login
       summary: Log a Device in
       description: |-
-        Checks the master password and creates a Device with a new token. The token appears only in this response; the server stores only its hash. The request's `User-Agent` is recorded on the Device.
+        Checks the master password and creates a Device with a new token. The token appears only in this response, in the body or in the cookie depending on `token_delivery`; the server stores only its hash. The request's `User-Agent` is recorded on the Device.
+
+        With `token_delivery: cookie`, the request must come from a trusted origin, or it gets 403. Because `token_delivery` is in the body, login checks the origin after the content type (415) and the body (400), and before the attempt limit (429) and the password. That 403 does not count as a failed login.
 
         After 5 wrong passwords in 15 minutes, the client IP gets 429 until the oldest failure leaves the window, even with the right password. The client IP is the last `X-Forwarded-For` entry, which the reverse proxy sets. Successful logins do not count.
       security: []
@@ -690,20 +721,26 @@ paths:
               name: Laptop
       responses:
         "201":
-          description: Device logged in.
+          description: Device logged in. With `token_delivery` `body`, an `AuthenticatedDevice`; with `cookie`, a `Device` and the `Set-Cookie` header.
           headers:
             Contract-Version:
               $ref: "#/components/headers/ContractVersion"
             Location:
               $ref: "#/components/headers/Location"
+            Set-Cookie:
+              $ref: "#/components/headers/SetTokenCookie"
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AuthenticatedDevice"
+                anyOf:
+                  - $ref: "#/components/schemas/AuthenticatedDevice"
+                  - $ref: "#/components/schemas/Device"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/WrongPassword"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "415":
           $ref: "#/components/responses/UnsupportedMediaType"
         "429":
@@ -733,6 +770,53 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "500":
           $ref: "#/components/responses/InternalServerError"
+  /devices/current:
+    parameters:
+      - $ref: "#/components/parameters/ContractVersion"
+    get:
+      tags: [Devices]
+      operationId: getCurrentDevice
+      summary: Get the calling Device
+      description: Returns the Device that owns the request's token. A browser Client calls it on start to learn whether its cookie still works. When the request is authenticated by the cookie, the response sets the cookie again with a full `Max-Age`, so a Client in use never reaches the browser's 400-day limit.
+      responses:
+        "200":
+          description: The calling Device.
+          headers:
+            Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
+            Set-Cookie:
+              $ref: "#/components/headers/SetTokenCookie"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Device"
+        "400":
+          $ref: "#/components/responses/ContractVersionUnsupported"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    delete:
+      tags: [Devices]
+      operationId: logout
+      summary: Log the calling Device out
+      description: Revokes the Device that owns the request's token, and the token stops working at once. The response expires the cookie.
+      responses:
+        "204":
+          description: Device revoked.
+          headers:
+            Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
+            Set-Cookie:
+              $ref: "#/components/headers/ExpireTokenCookie"
+        "400":
+          $ref: "#/components/responses/ContractVersionUnsupported"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /devices/{id}:
     parameters:
       - $ref: "#/components/parameters/ContractVersion"
@@ -741,17 +825,24 @@ paths:
       tags: [Devices]
       operationId: revokeDevice
       summary: Revoke a Device
-      description: Deletes the Device, and its token stops working at once. With the calling Device's own ID, it works as a logout.
+      description: Deletes the Device, and its token stops working at once. With the calling Device's own ID, it works as a logout and the response expires the cookie, also when the request used a Bearer token.
       responses:
         "204":
           headers:
             Contract-Version:
               $ref: "#/components/headers/ContractVersion"
+            Set-Cookie:
+              description: Sent when the revoked Device is the calling Device, with the same value as in `DELETE /devices/current`.
+              schema:
+                type: string
+              example: __Host-journal_token=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict
           description: Device revoked.
         "400":
           $ref: "#/components/responses/InvalidDeviceId"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/DeviceNotFound"
         "500":
@@ -762,6 +853,11 @@ components:
       type: http
       scheme: bearer
       description: Opaque token in the format `jrnl_` followed by 43 base64url characters, obtained from `POST /devices`.
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: __Host-journal_token
+      description: "The same token, set by `POST /devices` with `token_delivery: cookie`. Used only when the request has no `Authorization` header."
   parameters:
     DeviceId:
       name: id
@@ -818,6 +914,17 @@ components:
       schema:
         type: string
       example: /tasks/0190f3a2-7c1e-7b3d-9a4f-2c8e5d6b1a90
+    SetTokenCookie:
+      description: "Stores the token in the browser: `__Host-journal_token=<token>; Path=/; Max-Age=34560000; HttpOnly; Secure; SameSite=Strict`, without `Domain`. `Max-Age` is the 400-day limit of browsers."
+      schema:
+        type: string
+      example: __Host-journal_token=jrnl_q3V0bnVsbC1leGFtcGxlLXRva2VuLW5vdC1yZWFsMDA; Path=/; Max-Age=34560000; HttpOnly; Secure; SameSite=Strict
+    ExpireTokenCookie:
+      description: "Removes the token from the browser: `__Host-journal_token=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict`."
+      required: true
+      schema:
+        type: string
+      example: __Host-journal_token=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict
   schemas:
     ContractVersion:
       type: string
@@ -1041,6 +1148,11 @@ components:
           minLength: 1
           maxLength: 50
           description: Name of the Device, such as Laptop or iPhone. Leading and trailing whitespace is trimmed, and the limit applies after trimming. Duplicate names are allowed.
+        token_delivery:
+          type: string
+          enum: [body, cookie]
+          default: body
+          description: Where the token goes. With `body`, the response is an `AuthenticatedDevice`. With `cookie`, the response is a `Device` without the token, and the token goes in the `__Host-journal_token` cookie. Browser Clients use `cookie`.
     Device:
       type: object
       required: [id, name, user_agent, created_at, last_used_at]
@@ -1333,7 +1445,7 @@ components:
             status: 415
             detail: The request body must have the application/json content type.
     Unauthorized:
-      description: The Bearer token is missing, unknown or revoked. The `WWW-Authenticate` header includes `error="invalid_token"` when a token was sent.
+      description: The token, from the `Authorization` header or the cookie, is missing, unknown or revoked. The `WWW-Authenticate` header includes `error="invalid_token"` when a token was sent.
       headers:
         Contract-Version:
           $ref: "#/components/headers/ContractVersion"
@@ -1365,6 +1477,20 @@ components:
             title: Unauthorized
             status: 401
             detail: The password is incorrect.
+    Forbidden:
+      description: "A request authenticated by the cookie that changes data, or a login with `token_delivery: cookie`, did not come from a trusted origin. `Sec-Fetch-Site` is missing, cross-site, or `same-site` with an `Origin` that is not trusted."
+      headers:
+        Contract-Version:
+          $ref: "#/components/headers/ContractVersion"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          example:
+            type: about:blank
+            title: Forbidden
+            status: 403
+            detail: The request did not come from a trusted origin.
     TooManyLogins:
       description: The client IP sent a wrong password 5 times in the last 15 minutes.
       headers:

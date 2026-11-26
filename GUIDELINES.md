@@ -14,6 +14,8 @@ House rules for `openapi.yaml`, on top of Redocly's `recommended-strict` ruleset
 
 **G-06: Operations on a path with an ID declare 400 and 404.** The 400 covers an ID that is not a UUID. An upsert (`PUT`) declares no 404, because a missing ID creates the resource.
 
+**G-10: Operations that change data declare 403.** Every POST, PUT, PATCH and DELETE operation declares a 403 response, login included, for a cookie request that does not come from a trusted origin. See [ADR 0002](docs/adr/0002-token-in-httponly-cookie-for-browser-clients.md).
+
 ## Request bodies
 
 **G-04: Request body schemas are closed.** Every request body schema sets `additionalProperties: false`, so the API rejects unknown and read-only fields with 400.

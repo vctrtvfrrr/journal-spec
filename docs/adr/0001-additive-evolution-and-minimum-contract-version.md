@@ -1,20 +1,20 @@
-# Evolução aditiva do contrato e versão mínima pelo major
+# Additive evolution and minimum contract version
 
-Clients publicados (Android, TUI, PWA) ficam rodando versões antigas por tempo indeterminado, então a API precisa atender o contrato de todo Client ainda suportado. Decidimos que o contrato evolui só de forma aditiva, que remover algo exige deprecação seguida de um major, e que o major define a versão mínima aceita: com o contrato em `X.y.z`, a API aceita Clients a partir de `X.0.0`.
+Published Clients (Android, TUI, PWA) keep running old versions for an indefinite time, so the API must serve the contract of every Client that is still supported. We decided that the contract evolves only in an additive way, that removing something requires a deprecation followed by a major, and that the major defines the minimum accepted version: with the contract at `X.y.z`, the API accepts Clients from `X.0.0` up.
 
-## Opções consideradas
+## Considered options
 
-- **Quebra com bump de major e a API servindo vários majors ao mesmo tempo** (ex.: `/v1` e `/v2`): rejeitada, porque manter duas superfícies é caro demais para um Journal de um só owner.
-- **Só aditiva, para sempre, sem versão mínima**: rejeitada, porque nada poderia ser removido.
-- **Versão mínima configurada à parte na API**: rejeitada, porque derivar do major dá o mesmo resultado sem uma segunda fonte de verdade.
+- **Break with a major bump and the API serving several majors at the same time** (e.g. `/v1` and `/v2`): rejected, because keeping two surfaces is too expensive for a single-owner Journal.
+- **Additive only, forever, with no minimum version**: rejected, because nothing could ever be removed.
+- **Minimum version configured separately in the API**: rejected, because deriving it from the major gives the same result without a second source of truth.
 
-## Consequências
+## Consequences
 
-- Todo request e toda response levam o header `Contract-Version`. Na request, é a versão do contrato com que o Client foi gerado; na response, é a da API. Na request ele é obrigatório desde o início, porque nenhum Client foi publicado antes desta decisão.
-- A checagem de versão vem antes de qualquer outra, inclusive autenticação, 404, 405 e 415. Assim um Client antigo com token revogado vê "atualize" e não "faça login". A exceção é o preflight CORS (`OPTIONS` com `Origin` e `Access-Control-Request-Method`): o browser nunca envia headers próprios nele, e checá-lo bloquearia toda request de um Client web.
-- Um Client abaixo do mínimo, ou com o header ausente ou malformado, recebe 400 com o problem `ContractVersionProblem`: `type` fixo `tag:journal,2026:contract-version-unsupported` e a extensão `minimum_version`. Os demais problems continuam `about:blank`. Não usamos 426: o RFC 9110 reserva esse status para troca de protocolo e exige o header `Upgrade`.
-- Um Client mais novo que a API é aceito. Por isso a API faz deploy antes dos Clients.
-- Os Clients precisam ignorar campos desconhecidos nas responses (leitor tolerante). Sem isso, adicionar um campo de response seria uma quebra.
-- Enums que aparecem em responses ficam congelados: um valor novo é quebra e só entra num major. A alternativa, enums extensíveis com fallback obrigatório em todo Client, foi rejeitada pelo custo de manter esse fallback nos três Clients.
-- Versionamento: patch muda só docs e exemplos, minor só adiciona, major abandona Clients antigos.
-- Enquanto o contrato estiver em `0.x`, quebras são livres, desde que venham com pelo menos um bump de minor, e o mínimo não se aplica. O primeiro Client publicado marca o `1.0.0`.
+- Every request and every response carries the `Contract-Version` header. In the request, it is the contract version the Client was generated from; in the response, it is the API's version. In the request it is required from the start, because no Client was published before this decision.
+- The version check comes before any other check, including authentication, 404, 405, and 415. This way an old Client with a revoked token sees "update" and not "log in". The exception is the CORS preflight (`OPTIONS` with `Origin` and `Access-Control-Request-Method`): the browser never sends custom headers in it, and checking it would block every request from a web Client.
+- A Client below the minimum, or with the header missing or malformed, receives 400 with the `ContractVersionProblem` problem: fixed `type` `tag:journal,2026:contract-version-unsupported` and the `minimum_version` extension. All other problems stay `about:blank`. We do not use 426: RFC 9110 reserves that status for protocol switching and requires the `Upgrade` header.
+- A Client newer than the API is accepted. For this reason the API deploys before the Clients.
+- Clients must ignore unknown fields in responses (tolerant reader). Without this, adding a response field would be a breaking change.
+- Enums that appear in responses are frozen: a new value is a breaking change and only goes into a major. The alternative, extensible enums with a required fallback in every Client, was rejected because of the cost of maintaining that fallback in all three Clients.
+- Versioning: a patch changes only docs and examples, a minor only adds, a major drops old Clients.
+- While the contract is at `0.x`, breaking changes are free, as long as they come with at least a minor bump, and the minimum does not apply. The first published Client marks `1.0.0`.
