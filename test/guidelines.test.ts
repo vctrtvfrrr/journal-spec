@@ -237,6 +237,17 @@ describe("guidelines", () => {
     expect(ids).toContain("journal/g08-contract-version-parameter");
   });
 
+  it("G-08 accepts an exempt operation without the Contract-Version parameter or 400", async () => {
+    const ids = await violations((document) => {
+      const operation = document.paths["/tasks"].post;
+      operation["x-contract-version-exempt"] = true;
+      operation.parameters = [];
+      delete operation.responses[400];
+    });
+    expect(ids).not.toContain("journal/g08-contract-version-parameter");
+    expect(ids).not.toContain("journal/g08-contract-version-problem");
+  });
+
   it("G-08 rejects an operation whose 400 cannot be a ContractVersionProblem", async () => {
     const ids = await violations((document) => delete document.paths["/tasks"].post.responses[400]);
     expect(ids).toContain("journal/g08-contract-version-problem");

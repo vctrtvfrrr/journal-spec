@@ -1,0 +1,4 @@
+# GET /health has no 4xx: it takes no input, token or Contract-Version.
+openapi.yaml:
+  operation-4xx-response:
+    - '#/paths/~1health/get/responses'

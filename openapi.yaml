@@ -1,13 +1,13 @@
 openapi: 3.1.0
 info:
   title: Journal API
-  version: 0.4.0
+  version: 0.5.0
   description: |-
     API for the Tasks, Notebooks, and Notes of a single owner.
 
-    Every request must send `Contract-Version` with the version of this contract that the Client was built with, and every response carries the version the API implements. A CORS preflight (`OPTIONS` with `Origin` and `Access-Control-Request-Method`) is exempt, because browsers never send custom headers in it. The API checks this header before anything else, including authentication, unknown paths (404), unsupported methods (405) and the request content type (415): a missing or malformed value, or a version below the minimum, returns 400 with a `ContractVersionProblem` that names the minimum version. From 1.0.0 on, the minimum is the first version of the current major (`X.0.0`); while the contract is at 0.x, any valid version is accepted. Clients must ignore response fields they do not know, because new versions add fields.
+    Every request must send `Contract-Version` with the version of this contract that the Client was built with, and every response carries the version the API implements. A CORS preflight (`OPTIONS` with `Origin` and `Access-Control-Request-Method`) is exempt, because browsers never send custom headers in it. `GET /health` is also exempt, because it serves probes, not Clients. The API checks this header before anything else, including authentication, unknown paths (404), unsupported methods (405) and the request content type (415): a missing or malformed value, or a version below the minimum, returns 400 with a `ContractVersionProblem` that names the minimum version. From 1.0.0 on, the minimum is the first version of the current major (`X.0.0`); while the contract is at 0.x, any valid version is accepted. Clients must ignore response fields they do not know, because new versions add fields.
 
-    Every endpoint except login (`POST /devices`) requires the token of a Device. Logging in with the master password creates a Device with its own token, delivered in one of two ways. Native Clients get the token in the response body and send it as `Authorization: Bearer <token>`. Browser Clients log in with `token_delivery: cookie`, and the browser then sends the token in the `__Host-journal_token` cookie, which is `HttpOnly`, so JavaScript never sees it. A request with an `Authorization` header is authenticated by that header, and the cookie is ignored. Tokens do not expire; a token stops working only when its Device is revoked with `DELETE /devices/{id}` or `DELETE /devices/current`. A missing, unknown or revoked token returns 401 with a `WWW-Authenticate` header, also on unknown paths.
+    Every endpoint except login (`POST /devices`) and `GET /health` requires the token of a Device. Logging in with the master password creates a Device with its own token, delivered in one of two ways. Native Clients get the token in the response body and send it as `Authorization: Bearer <token>`. Browser Clients log in with `token_delivery: cookie`, and the browser then sends the token in the `__Host-journal_token` cookie, which is `HttpOnly`, so JavaScript never sees it. A request with an `Authorization` header is authenticated by that header, and the cookie is ignored. Tokens do not expire; a token stops working only when its Device is revoked with `DELETE /devices/{id}` or `DELETE /devices/current`. A missing, unknown or revoked token returns 401 with a `WWW-Authenticate` header, also on unknown paths.
 
     A request authenticated by the cookie that uses POST, PUT, PATCH or DELETE, and a login with `token_delivery: cookie`, must come from a trusted origin: `Sec-Fetch-Site` must be `same-origin`, or `same-site` with an `Origin` on the API's list of trusted origins. That list is deployment configuration, and it also decides which origins get CORS responses with credentials. Otherwise, also when `Sec-Fetch-Site` is missing, the API returns 403. Requests with a Bearer token skip this check. The cookie works only when the web Client and the API share a registrable domain: the same host, or sibling subdomains.
 
@@ -31,7 +31,31 @@ tags:
     description: Markdown Notes, each with a Partial Date, on the Timeline of their Notebook.
   - name: Devices
     description: Devices logged in with the master password. Each login creates a Device with its own token.
+  - name: Health
+    description: Whether the API can serve requests, for container and uptime probes.
 paths:
+  /health:
+    get:
+      tags: [Health]
+      operationId: getHealth
+      summary: Check the API's health
+      description: Returns 200 when the API reaches its database, and 503 when it does not. It needs neither a token nor `Contract-Version`, so a probe can call it with a plain request.
+      x-contract-version-exempt: true
+      security: []
+      responses:
+        "200":
+          description: The API and its database are up.
+          headers:
+            Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
   /tasks:
     parameters:
       - $ref: "#/components/parameters/ContractVersion"
@@ -708,7 +732,7 @@ paths:
 
         With `token_delivery: cookie`, the request must come from a trusted origin, or it gets 403. Because `token_delivery` is in the body, login checks the origin after the content type (415) and the body (400), and before the attempt limit (429) and the password. That 403 does not count as a failed login.
 
-        After 5 wrong passwords in 15 minutes, the client IP gets 429 until the oldest failure leaves the window, even with the right password. The client IP is the last `X-Forwarded-For` entry, which the reverse proxy sets. Successful logins do not count.
+        After 5 wrong passwords in 15 minutes, the client IP gets 429 until the oldest failure leaves the window, even with the right password. The client IP is the `CF-Connecting-IP` header when present, which Cloudflare sets, and otherwise the last `X-Forwarded-For` entry, which the reverse proxy sets. Successful logins do not count.
       security: []
       requestBody:
         required: true
@@ -1198,6 +1222,13 @@ components:
             current:
               type: boolean
               description: True for the calling Device.
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          const: ok
     Problem:
       type: object
       description: Problem details (RFC 9457).
@@ -1540,6 +1571,20 @@ components:
             title: Not Found
             status: 404
             detail: Device 0190f3a3-1111-7000-8000-0000000de71c does not exist.
+    ServiceUnavailable:
+      headers:
+        Contract-Version:
+          $ref: "#/components/headers/ContractVersion"
+      description: The API cannot reach its database.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          example:
+            type: about:blank
+            title: Service Unavailable
+            status: 503
+            detail: The database is unavailable.
     InternalServerError:
       headers:
         Contract-Version:

@@ -26,7 +26,7 @@ See [ADR 0001](docs/adr/0001-additive-evolution-and-minimum-contract-version.md)
 
 **G-07: Every response carries `Contract-Version`.** Every response references `#/components/headers/ContractVersion`, including errors.
 
-**G-08: Every operation accepts `Contract-Version`.** Every operation references `#/components/parameters/ContractVersion`, and its 400 response can be a `ContractVersionProblem`.
+**G-08: Every operation accepts `Contract-Version`.** Every operation references `#/components/parameters/ContractVersion`, and its 400 response can be a `ContractVersionProblem`. An operation with `x-contract-version-exempt: true` is the exception: `GET /health` serves probes, which send no `Contract-Version`.
 
 ## Naming
 

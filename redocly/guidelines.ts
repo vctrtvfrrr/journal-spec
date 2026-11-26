@@ -14,6 +14,7 @@ type Response = Ref & {
 };
 
 type Operation = {
+  "x-contract-version-exempt"?: boolean;
   security?: SecurityRequirement[];
   parameters?: Ref[];
   requestBody?: unknown;
@@ -148,13 +149,17 @@ function contractVersionHeader(): Visitor {
   };
 }
 
+function isContractVersionExempt(operation: Operation): boolean {
+  return operation["x-contract-version-exempt"] === true;
+}
+
 function contractVersionParameter(): Visitor {
   return {
     PathItem(pathItem, { report, location }) {
       const pathParameters = pathItem.parameters ?? [];
       for (const method of HTTP_METHODS) {
         const operation = pathItem[method];
-        if (!operation) continue;
+        if (!operation || isContractVersionExempt(operation)) continue;
         const parameters = [...pathParameters, ...(operation.parameters ?? [])];
         if (parameters.some((parameter) => parameter.$ref === CONTRACT_VERSION_PARAMETER)) continue;
         report({
@@ -169,6 +174,7 @@ function contractVersionParameter(): Visitor {
 function contractVersionProblem(): Visitor {
   return {
     Operation(operation, { report, location, resolve }) {
+      if (isContractVersionExempt(operation)) return;
       const badRequest = operation.responses?.["400"] && resolve(operation.responses["400"]).node;
       const schema = badRequest?.content?.["application/problem+json"]?.schema;
       if (schemaRefs(schema).includes(CONTRACT_VERSION_PROBLEM)) return;
