@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Journal API
-  version: 0.6.0
+  version: 0.7.0
   description: |-
     API for the Tasks, Notebooks, and Notes of a single owner.
 
@@ -15,9 +15,9 @@ info:
 
     Every ID is a UUIDv7 (RFC 9562), the primary key of every table: Tasks, Notebooks, Notes, and Devices. This holds for the IDs that the API generates and for the IDs that a Client generates for an upsert (`PUT`). The API rejects a UUID of any other version, such as a UUIDv4, with 400.
 
-    Request bodies must use `Content-Type: application/json`. In any writable field, `null` is the same as omitting the field. Unknown or read-only fields (`id`, `created_at`, `updated_at`, `deleted_at`) are rejected with 400, even when their value is `null`.
+    Request bodies must use `Content-Type: application/json`. In a request body, `null` means "no value": it is accepted only in a field that can be empty, such as the `description` or the `parent_id` of a Task, and is rejected with 400 in any other field. To get a field's default in a `POST` or `PUT`, or to keep its value in a `PATCH`, omit the field. Unknown or read-only fields (`id`, `created_at`, `updated_at`, `deleted_at`) are rejected with 400, even when their value is `null`.
 
-    Errors use RFC 9457 problem details (`application/problem+json`). An unknown path returns 404. An unsupported method on a known path returns 405 with an `Allow` header.
+    Errors use RFC 9457 problem details (`application/problem+json`). A 400 means that the request is invalid by itself. A 422 means that the body is valid but refers to another resource in a way the API cannot accept, such as a Notebook that does not exist or a parent Task that would create a cycle; the API checks it only after the body passes every 400 check. An unknown path returns 404. An unsupported method on a known path returns 405 with an `Allow` header.
 servers:
   - url: http://localhost:3000
     description: Local development
@@ -26,7 +26,7 @@ security:
   - cookieAuth: []
 tags:
   - name: Tasks
-    description: Tasks with a title, description, status, and priority.
+    description: Tasks with a title, description, status, and priority. A Task can have Subtasks, up to four levels deep. Every Task has its own status, and completing or reopening a Task does not change its parent or its Subtasks.
   - name: Notebooks
     description: Notebooks that group Notes, such as Diary or Plants.
   - name: Notes
@@ -65,7 +65,7 @@ paths:
       tags: [Tasks]
       operationId: listTasks
       summary: List Tasks
-      description: Returns all Tasks that are not deleted, ordered by `priority` ascending, then `created_at` descending, then `id` ascending. There are no filters and no pagination.
+      description: Returns all Tasks that are not deleted, Subtasks included, ordered by `priority` ascending, then `created_at` descending, then `id` ascending. There are no filters and no pagination. The list is flat, and Clients build the tree from `parent_id`, and the Subtasks of one parent keep this order.
       responses:
         "200":
           headers:
@@ -88,7 +88,7 @@ paths:
       tags: [Tasks]
       operationId: createTask
       summary: Create a Task
-      description: Creates a Task with a server-generated ID (UUIDv7). Omitted fields get their default values.
+      description: Creates a Task with a server-generated ID (UUIDv7). Omitted fields get their default values. With `parent_id`, the Task is created as a Subtask of that parent, and the rules of `parent_id` apply.
       requestBody:
         required: true
         content:
@@ -115,6 +115,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ParentRejected"
         "415":
           $ref: "#/components/responses/UnsupportedMediaType"
         "401":
@@ -154,7 +156,9 @@ paths:
       description: |-
         Upsert with a client-generated UUIDv7 ID.
 
-        If the ID does not exist, creates the Task (201). If it exists, replaces the whole Task (200): omitted or `null` fields return to their defaults, and `created_at` is kept. If the ID belongs to a deleted Task, returns 409.
+        If the ID does not exist, creates the Task (201). If it exists, replaces the whole Task (200): omitted fields return to their defaults, and `created_at` is kept. If the ID belongs to a deleted Task, returns 409.
+
+        `parent_id` is replaced like the other fields, so a Subtask replaced without `parent_id` moves to the top level. A Task moves with all its Subtasks, and the rules of `parent_id` apply, also when the Task is created.
       requestBody:
         required: true
         content:
@@ -203,6 +207,8 @@ paths:
                 title: Conflict
                 status: 409
                 detail: Task 0190f3a2-7c1e-7b3d-9a4f-2c8e5d6b1a90 was deleted.
+        "422":
+          $ref: "#/components/responses/ParentRejected"
         "415":
           $ref: "#/components/responses/UnsupportedMediaType"
         "401":
@@ -214,9 +220,11 @@ paths:
       operationId: updateTask
       summary: Update part of a Task
       description: |-
-        Changes only the fields in the body. `null` fields are ignored, and `description: ""` clears the description.
+        Changes only the fields in the body; omitted fields stay as they are. `description: null` clears the description, and `parent_id: null` moves the Task to the top level. `null` in any other field is rejected with 400.
 
-        Any field present updates `updated_at`, even if the value does not change. A body with no fields (`{}` or only `null`) returns the Task unchanged.
+        Changing `parent_id` moves the Task, with all its Subtasks, under another parent, and the rules of `parent_id` apply. Moving is choosing a parent, never a position: among its new siblings, the Task follows the order of `GET /tasks`. Changing `status` does not change the parent or the Subtasks.
+
+        Any field present updates `updated_at` of this Task, even if the value does not change. The old parent, the new parent, and the moved Subtasks keep their `updated_at`. A body with no fields (`{}`) returns the Task unchanged.
       requestBody:
         required: true
         content:
@@ -241,6 +249,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ParentRejected"
         "415":
           $ref: "#/components/responses/UnsupportedMediaType"
         "401":
@@ -251,7 +261,7 @@ paths:
       tags: [Tasks]
       operationId: deleteTask
       summary: Delete a Task
-      description: Soft delete. The Task then returns 404 on every endpoint and disappears from the list. There is no restore.
+      description: Soft delete of the Task and all its Subtasks, at any depth. Each deleted Task then returns 404 on every endpoint and 409 on `PUT`, disappears from the list, and is rejected as a `parent_id`. There is no restore. The parent's `updated_at` does not change.
       responses:
         "204":
           headers:
@@ -429,7 +439,7 @@ paths:
       tags: [Notebooks]
       operationId: updateNotebook
       summary: Rename a Notebook
-      description: Changes only the fields in the body. A body with no fields (`{}` or only `null`) returns the Notebook unchanged.
+      description: Changes only the fields in the body; omitted fields stay as they are. `null` is rejected with 400. A body with no fields (`{}`) returns the Notebook unchanged.
       requestBody:
         required: true
         content:
@@ -603,6 +613,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/NotebookRejected"
         "415":
           $ref: "#/components/responses/UnsupportedMediaType"
         "401":
@@ -689,6 +701,8 @@ paths:
                 title: Conflict
                 status: 409
                 detail: Note 0190f3a2-7c1e-7b3d-9a4f-2c8e5d6b1a90 was deleted.
+        "422":
+          $ref: "#/components/responses/NotebookRejected"
         "415":
           $ref: "#/components/responses/UnsupportedMediaType"
         "401":
@@ -700,9 +714,9 @@ paths:
       operationId: updateNote
       summary: Update part of a Note
       description: |-
-        Changes only the fields in the body. `null` fields are ignored. Changing `notebook_id` moves the Note to another Notebook. Changing `date` can change the precision (for example, from `2025-07-18T15:35` to `2025-07`).
+        Changes only the fields in the body; omitted fields stay as they are. `null` in any field is rejected with 400. Changing `notebook_id` moves the Note to another Notebook. Changing `date` can change the precision (for example, from `2025-07-18T15:35` to `2025-07`).
 
-        Any field present updates `updated_at`. A body with no fields (`{}` or only `null`) returns the Note unchanged.
+        Any field present updates `updated_at`. A body with no fields (`{}`) returns the Note unchanged.
       requestBody:
         required: true
         content:
@@ -727,6 +741,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NoteNotFound"
+        "422":
+          $ref: "#/components/responses/NotebookRejected"
         "415":
           $ref: "#/components/responses/UnsupportedMediaType"
         "401":
@@ -997,10 +1013,15 @@ components:
       description: Any status can change to any other status.
     Task:
       type: object
-      required: [id, title, description, status, priority, created_at, updated_at]
+      required: [id, parent_id, title, description, status, priority, created_at, updated_at]
       properties:
         id:
           $ref: "#/components/schemas/Uuidv7"
+        parent_id:
+          anyOf:
+            - $ref: "#/components/schemas/Uuidv7"
+            - type: "null"
+          description: ID of the parent Task, or `null` for a top-level Task.
         title:
           type: string
           minLength: 1
@@ -1023,15 +1044,26 @@ components:
           format: date-time
       example:
         id: 0190f3a2-7c1e-7b3d-9a4f-2c8e5d6b1a90
+        parent_id: null
         title: Buy milk
         description: 2 liters
         status: todo
         priority: 1
         created_at: "2026-11-22T14:00:00.000Z"
         updated_at: "2026-11-22T14:00:00.000Z"
+    ParentTaskReference:
+      anyOf:
+        - $ref: "#/components/schemas/Uuidv7"
+        - type: "null"
+      description: |-
+        ID of the parent Task, or `null` for a top-level Task. The API rejects a parent with 422 and a single error at `/parent_id`, checking in this order:
+
+        1. The parent does not exist or was deleted.
+        2. The parent is the Task itself or one of its Subtasks, at any depth. A `PUT` that creates a Task with its own ID as `parent_id` falls here.
+        3. The tree would pass four levels, counting a top-level Task as level 1: the level of the parent plus the height of the Task with its Subtasks must not pass 4.
     TaskInput:
       type: object
-      description: Body for create or replace. Omitted or `null` fields get their default value.
+      description: Body for create or replace. Omitted fields get their default value.
       additionalProperties: false
       required: [title]
       properties:
@@ -1046,37 +1078,39 @@ components:
           default: null
           description: Leading and trailing whitespace is trimmed. An empty or whitespace-only value becomes `null`.
         status:
-          anyOf:
-            - $ref: "#/components/schemas/TaskStatus"
-            - type: "null"
+          $ref: "#/components/schemas/TaskStatus"
           default: todo
         priority:
-          type: [integer, "null"]
+          type: integer
           minimum: 1
           maximum: 5
           default: 3
+        parent_id:
+          $ref: "#/components/schemas/ParentTaskReference"
+          default: null
     TaskChanges:
       type: object
-      description: Fields to change. Omitted or `null` fields stay as they are.
+      description: Fields to change. Omitted fields stay as they are.
       additionalProperties: false
       properties:
         title:
-          type: [string, "null"]
+          type: string
           minLength: 1
           maxLength: 200
           description: Leading and trailing whitespace is trimmed. An empty or whitespace-only value is rejected.
         description:
           type: [string, "null"]
           maxLength: 10000
-          description: Leading and trailing whitespace is trimmed. An empty or whitespace-only value clears the description.
+          description: Leading and trailing whitespace is trimmed. `null`, or an empty or whitespace-only value, clears the description.
         status:
-          anyOf:
-            - $ref: "#/components/schemas/TaskStatus"
-            - type: "null"
+          $ref: "#/components/schemas/TaskStatus"
         priority:
-          type: [integer, "null"]
+          type: integer
           minimum: 1
           maximum: 5
+        parent_id:
+          $ref: "#/components/schemas/ParentTaskReference"
+          description: The new parent. `null` moves the Task to the top level. The rules of `ParentTaskReference` apply.
     PartialDate:
       type: string
       description: |-
@@ -1129,16 +1163,14 @@ components:
           $ref: "#/components/schemas/NotebookName"
     NotebookChanges:
       type: object
-      description: Fields to change. Omitted or `null` fields stay as they are.
+      description: Fields to change. Omitted fields stay as they are.
       additionalProperties: false
       properties:
         name:
-          anyOf:
-            - $ref: "#/components/schemas/NotebookName"
-            - type: "null"
+          $ref: "#/components/schemas/NotebookName"
     NotebookReference:
       $ref: "#/components/schemas/Uuidv7"
-      description: ID of a Notebook that is not archived. An unknown or archived Notebook is rejected with 400, even if the Note is already in it. To edit a Note of an archived Notebook with `PUT`, move it to an active Notebook; a `PATCH` without `notebook_id` keeps it where it is.
+      description: ID of a Notebook that is not archived. An unknown or archived Notebook is rejected with 422, even if the Note is already in it. To edit a Note of an archived Notebook with `PUT`, move it to an active Notebook; a `PATCH` without `notebook_id` keeps it where it is.
     Note:
       type: object
       required: [id, notebook_id, content, date, created_at, updated_at]
@@ -1179,21 +1211,15 @@ components:
           $ref: "#/components/schemas/PartialDate"
     NoteChanges:
       type: object
-      description: Fields to change. Omitted or `null` fields stay as they are.
+      description: Fields to change. Omitted fields stay as they are.
       additionalProperties: false
       properties:
         notebook_id:
-          anyOf:
-            - $ref: "#/components/schemas/NotebookReference"
-            - type: "null"
+          $ref: "#/components/schemas/NotebookReference"
         content:
-          anyOf:
-            - $ref: "#/components/schemas/NoteContent"
-            - type: "null"
+          $ref: "#/components/schemas/NoteContent"
         date:
-          anyOf:
-            - $ref: "#/components/schemas/PartialDate"
-            - type: "null"
+          $ref: "#/components/schemas/PartialDate"
     LoginInput:
       type: object
       additionalProperties: false
@@ -1338,7 +1364,7 @@ components:
         Contract-Version:
           $ref: "#/components/headers/ContractVersion"
       description: |-
-        Invalid request. For invalid, unknown or read-only fields, `errors` lists each field. For malformed JSON or an ID that is not a UUIDv7, the response has no `errors`. A rejected `Contract-Version` header returns a `ContractVersionProblem`.
+        Invalid request. For invalid, unknown or read-only fields, and for `null` in a field that cannot be empty, `errors` lists each field. For malformed JSON or an ID that is not a UUIDv7, the response has no `errors`. A rejected `Contract-Version` header returns a `ContractVersionProblem`.
       content:
         application/problem+json:
           schema:
@@ -1366,6 +1392,63 @@ components:
                 title: Bad Request
                 status: 400
                 detail: The request body must be valid JSON.
+    ParentRejected:
+      headers:
+        Contract-Version:
+          $ref: "#/components/headers/ContractVersion"
+      description: The `parent_id` does not exist or was deleted, would create a cycle, or would pass four levels. See `ParentTaskReference`.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ValidationProblem"
+          examples:
+            missingParent:
+              summary: Parent does not exist or was deleted
+              value:
+                type: about:blank
+                title: Unprocessable Content
+                status: 422
+                detail: The parent Task cannot be used.
+                errors:
+                  - pointer: "#/parent_id"
+                    detail: Task 0190f3a2-7c1e-7b3d-9a4f-2c8e5d6b1a90 does not exist.
+            cycle:
+              summary: Parent is the Task or one of its Subtasks
+              value:
+                type: about:blank
+                title: Unprocessable Content
+                status: 422
+                detail: The parent Task cannot be used.
+                errors:
+                  - pointer: "#/parent_id"
+                    detail: A Task cannot be under itself or one of its Subtasks.
+            tooDeep:
+              summary: More than four levels
+              value:
+                type: about:blank
+                title: Unprocessable Content
+                status: 422
+                detail: The parent Task cannot be used.
+                errors:
+                  - pointer: "#/parent_id"
+                    detail: Tasks nest up to four levels deep.
+    NotebookRejected:
+      headers:
+        Contract-Version:
+          $ref: "#/components/headers/ContractVersion"
+      description: The `notebook_id` does not exist or was archived.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ValidationProblem"
+          example:
+            type: about:blank
+            title: Unprocessable Content
+            status: 422
+            detail: The Notebook cannot be used.
+            errors:
+              - pointer: "#/notebook_id"
+                detail: Notebook 0190f3a1-0000-7000-8000-00000000d1a0 does not exist or was archived.
     InvalidTaskId:
       headers:
         Contract-Version:

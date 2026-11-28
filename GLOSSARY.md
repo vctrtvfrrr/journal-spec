@@ -8,6 +8,10 @@ A personal journal with task tracking, kept by a single owner across their devic
 A unit of work the owner wants to do, with a status and a priority.
 _Avoid_: Todo, item
 
+**Subtask**:
+A Task with a parent Task. Tasks nest up to four levels deep, counting a top-level Task as level 1.
+_Avoid_: Child task, subitem
+
 **Notebook**:
 A named collection of Notes.
 _Avoid_: Journal, folder
