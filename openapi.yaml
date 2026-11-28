@@ -17,7 +17,7 @@ info:
 
     Request bodies must use `Content-Type: application/json`. In a request body, `null` means "no value": it is accepted only in a field that can be empty, such as the `description` or the `parent_id` of a Task, and is rejected with 400 in any other field. To get a field's default in a `POST` or `PUT`, or to keep its value in a `PATCH`, omit the field. Unknown or read-only fields (`id`, `created_at`, `updated_at`, `deleted_at`) are rejected with 400, even when their value is `null`.
 
-    Errors use RFC 9457 problem details (`application/problem+json`). A 400 means that the request is invalid by itself. A 422 means that the body is valid but refers to another resource in a way the API cannot accept, such as a Notebook that does not exist or a parent Task that would create a cycle; the API checks it only after the body passes every 400 check. An unknown path returns 404. An unsupported method on a known path returns 405 with an `Allow` header.
+    Errors use RFC 9457 problem details (`application/problem+json`). A 400 means that the request is invalid by itself. A 422 means that the body is valid but refers to another resource in a way the API cannot accept, such as a Notebook that does not exist or a parent Task that would create a cycle; the API checks it last, after every 400 check and after it finds the target of the request, so a missing target still returns 404 and a deleted target on `PUT` still returns 409. An unknown path returns 404. An unsupported method on a known path returns 405 with an `Allow` header.
 servers:
   - url: http://localhost:3000
     description: Local development
@@ -261,7 +261,7 @@ paths:
       tags: [Tasks]
       operationId: deleteTask
       summary: Delete a Task
-      description: Soft delete of the Task and all its Subtasks, at any depth. Each deleted Task then returns 404 on every endpoint and 409 on `PUT`, disappears from the list, and is rejected as a `parent_id`. There is no restore. The parent's `updated_at` does not change.
+      description: Soft delete of the Task and all its Subtasks, at any depth, in one atomic step. Each deleted Task then returns 404 on every endpoint and 409 on `PUT`, disappears from the list, and is rejected as a `parent_id`. There is no restore. The parent's `updated_at` does not change.
       responses:
         "204":
           headers:
@@ -1058,9 +1058,11 @@ components:
       description: |-
         ID of the parent Task, or `null` for a top-level Task. The API rejects a parent with 422 and a single error at `/parent_id`, checking in this order:
 
-        1. The parent does not exist or was deleted.
+        1. The parent does not exist or was deleted. The Task's own ID always counts as existing, also in a `PUT` that creates the Task.
         2. The parent is the Task itself or one of its Subtasks, at any depth. A `PUT` that creates a Task with its own ID as `parent_id` falls here.
         3. The tree would pass four levels, counting a top-level Task as level 1: the level of the parent plus the height of the Task with its Subtasks must not pass 4.
+
+        The API keeps these rules true under concurrent requests: writes that change the tree take effect as if they ran one after another, so two moves that are each valid alone cannot together create a cycle or pass four levels, and a Task cannot be created under a parent that is being deleted.
     TaskInput:
       type: object
       description: Body for create or replace. Omitted fields get their default value.
